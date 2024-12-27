@@ -192,6 +192,7 @@ impl SJF {
 // HRRN Algorithm ----------------------------------------------------------------------------------
 // Meownoosh
 
+
 struct HRRN {
     processes: Vec<Process>,
     current_process: Option<Process>,
@@ -199,8 +200,77 @@ struct HRRN {
     context_switch_duration: Duration,
 }
 
-impl HRRN {
+impl Queue for HRRN {
+    fn enqueue(&mut self, mut process: Process) {
+        process.status = ProcessStatus::Ready;
+        self.processes.push(process);
+    }
+
+    fn dequeue(&mut self) -> Option<Process> {
+        if self.processes.is_empty() {
+            None
+        } else {
+            let time_elapsed = self.current_time.as_secs() as u32;
+
+            // Calculate response ratio
+            // self.processes.iter_mut().for_each(|process| {
+            //     if process.arrival_time <= time_elapsed {
+            //         process.response_ratio = (time_elapsed - process.arrival_time + process.cpu_burst_time) as f64 / process.cpu_burst_time as f64;
+            //     }
+            // });
+
+            // Sort by response ratio in descending order
+            self.processes.sort_by(|a, b| b.response_ratio.partial_cmp(&a.response_ratio).unwrap());
+
+            Some(self.processes.remove(0))
+        }
+    }
+
+    fn start(&mut self, stop_flag: Arc<AtomicBool>) {
+        self.current_time = Duration::from_millis(0);
+        let time_passed = Instant::now();
+
+        loop {
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            match self.dequeue() {
+                Some(mut process) => {
+                    if process.arrival_time > time_passed.elapsed() {
+                        sleep(process.arrival_time - time_passed.elapsed());
+                    }
+
+                    self.current_process = Some(process);
+                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    let result = self.current_process.as_mut().unwrap().run();
+                    match result {
+                        Ok(_) => {
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.current_time = time_passed.elapsed();
+                            println!("Process: {} Terminated At: {:?}", self.current_process.as_mut().unwrap().id, self.current_time);
+                        },
+                        Err(_) => {}
+                    }
+                }
+                None => {}
+            }
+
+            sleep(self.context_switch_duration); // context switch process ...
+        }
+    }
+
+    fn init() -> Self {
+        Hrrn {
+            processes: vec![],
+            current_process: None,
+            current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_micros(5),
+        }
+    }
 }
+
 
 
 // RR Algorithm ------------------------------------------------------------------------------------
@@ -210,11 +280,65 @@ struct RR {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
+    time_quantum: Duration,
 }
 
-impl RR {
-}
 
+impl Queue for RR {
+    fn enqueue(&mut self, mut process: Process) {
+        process.status = ProcessStatus::Ready;
+        self.processes.push(process)
+    }
+
+    fn dequeue(&mut self) -> Option<Process> {
+        if self.processes.is_empty() {
+            None
+        } else {
+            Some(self.processes.remove(0))
+        }
+    }
+
+    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+        self.current_time = Duration::from_millis(0);
+        let time_passed = Instant::now();
+        loop {  // in this loop we process all processes until there is no process left
+
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            match self.dequeue() {
+                Some(mut process) => {
+                    self.current_process = Some(process);
+                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    let result = self.current_process.as_mut().unwrap().run();
+                    match result {
+                        Ok(_) => {
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.current_time = time_passed.elapsed();
+                            println!("Process: {} Terminated At: {:?}", self.current_process.as_mut().unwrap().id ,self.current_time);
+                        },
+                        Err(_) => {}
+                    }
+                }
+                None => {}
+            }
+
+            sleep(self.context_switch_duration); // context switch process ...
+        }
+    }
+
+    fn init() -> Self {
+        Self {
+            processes: vec![] ,
+            current_process: None,
+            current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_micros(5),
+            time_quantum: Duration:: from_millis(10)
+        }
+    }
+}
 // SRF Algorithm -----------------------------------------------------------------------------------
 // Erfun
 
