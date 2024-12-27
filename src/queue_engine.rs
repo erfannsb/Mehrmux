@@ -1,3 +1,4 @@
+use std::thread::sleep;
 use std::time::{Duration, Instant};
 use crate::process_gen::{build_test_process, Process, ProcessStatus};
 
@@ -14,6 +15,7 @@ struct FIFO {
     queue: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
+    context_switch_duration: Duration
 }
 
 impl FIFO {
@@ -22,6 +24,7 @@ impl FIFO {
             queue: vec![] ,
             current_process: None,
             current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_millis(10)
         }
     }
 
@@ -29,14 +32,17 @@ impl FIFO {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
-            self.current_time = time_passed.elapsed();
-
             if self.queue.is_empty() {
                 break;
             }
 
             match self.dequeue() {
                 Some(mut process) => {
+
+                    if process.arrival_time > time_passed.elapsed() {
+                        sleep(process.arrival_time - time_passed.elapsed())
+                    }
+
                     self.current_process = Some(process);
                     self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
                     let result = self.current_process.as_mut().unwrap().run();
@@ -48,6 +54,7 @@ impl FIFO {
                 None => {}
             }
 
+            self.current_time = time_passed.elapsed();
             println!("{:?}", self.current_time);
         }
     }
@@ -60,6 +67,7 @@ impl Queue for FIFO {
     }
 
     fn dequeue(&mut self) -> Option<Process> {
+        sleep(self.context_switch_duration); // context switch process ...
         if self.queue.is_empty() {
             None
         } else {
@@ -172,7 +180,8 @@ impl MLFQ {
 
 pub fn test() {
     let mut fifo: FIFO = FIFO::init();
-    let list_of_processes = vec![build_test_process(), build_test_process(), build_test_process()];
+    let mut list_of_processes = vec![build_test_process(), build_test_process(), build_test_process()];
+    list_of_processes.sort_by_key(|p| p.arrival_time);
     println!("{:?}", &list_of_processes);
     fifo.queue.extend(list_of_processes);
     fifo.run();
