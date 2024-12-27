@@ -1,13 +1,16 @@
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use crate::process_gen::{build_test_process, Process, ProcessStatus};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 
 // Common Queueing Sense ---------------------------------------------------------------------------
 
 trait  Queue {
     fn enqueue(&mut self,process: Process); // to add a process to the queue
     fn dequeue(&mut self) -> Option<Process>; // to remove and return a process from queue
-    fn start(&mut self); // to start running the queue
+    fn start(&mut self, stop_flag: Arc<AtomicBool>); // to start running the queue
     fn init() -> Self; // to initiate an instant of queue
 }
 
@@ -23,8 +26,8 @@ trait  Queue {
 //every queue should inherit from Queue trait and define its own enqueue and dequeue method
 
 //every queue should implement start method in which there will be an infinite loop which never
-//stops (stopping this function is done by the threading which will be done later...)
-//the loop would do nothing unless there is at least one process in the processes vector!
+//stops (by adding stop_flag in start method parameter we can then pass an atomic boolean to stop
+//the loop). the loop would do nothing unless there is at least one process in the processes vector!
 //if processes vector isn't empty then the process with the right priority based on the algorithm
 //would be chosen in the dequeue method. then the chosen process will be executed by calling
 //the run method.
@@ -53,10 +56,15 @@ impl Queue for FIFO {
         }
     }
 
-    fn start(&mut self) {
+    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
+
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
 
             match self.dequeue() {
                 Some(mut process) => {
@@ -210,6 +218,16 @@ pub fn test() {
     list_of_processes.sort_by_key(|p| p.arrival_time);
     println!("{:?}", &list_of_processes);
     fifo.processes.extend(list_of_processes);
-    fifo.start();
-    sleep(Duration::from_secs(4));
+
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_clone = Arc::clone(&stop_flag);
+
+    let handle = thread::spawn(move || {
+        fifo.start(stop_flag_clone); // Pass stop_flag to the start method
+    });
+
+    sleep(Duration::from_secs(5));
+    stop_flag.store(true, Ordering::Relaxed); // Set the stop flag after 5 seconds
+
+    handle.join().unwrap();
 }
