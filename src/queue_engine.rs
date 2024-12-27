@@ -5,11 +5,10 @@ use crate::process_gen::{build_test_process, Process, ProcessStatus};
 // Common Queueing Sense ---------------------------------------------------------------------------
 
 trait  Queue {
-    fn enqueue(&mut self,process: Process);
-    fn dequeue(&mut self) -> Option<Process>;
-    fn start(&mut self);
-    fn stop(&mut self);
-    fn init() -> Self;
+    fn enqueue(&mut self,process: Process); // to add a process to the queue
+    fn dequeue(&mut self) -> Option<Process>; // to remove and return a process from queue
+    fn start(&mut self); // to start running the queue
+    fn init() -> Self; // to initiate an instant of queue
 }
 
 // Important Description ---------------------------------------------------------------------------
@@ -19,13 +18,13 @@ trait  Queue {
 //current_process: to keep track of the current process running
 //current_time: to measure the time passed while running the queue algorithm
 //context_switch_duration: arbitrary duration for hypothetical context switching process
-//running: this variable is needed to stop or start running the queue!
+
 
 //every queue should inherit from Queue trait and define its own enqueue and dequeue method
 
 //every queue should implement start method in which there will be an infinite loop which never
-//stops unless "running" boolean flag defined in the struct property is changed to false by stop
-//method. the loop would do nothing unless there is at least one process in the processes vector!
+//stops (stopping this function is done by the threading which will be done later...)
+//the loop would do nothing unless there is at least one process in the processes vector!
 //if processes vector isn't empty then the process with the right priority based on the algorithm
 //would be chosen in the dequeue method. then the chosen process will be executed by calling
 //the run method.
@@ -38,7 +37,6 @@ struct FIFO {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl Queue for FIFO {
@@ -56,14 +54,9 @@ impl Queue for FIFO {
     }
 
     fn start(&mut self) {
-        self.running = true;
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
-
-            if !self.running {
-                break
-            }
 
             match self.dequeue() {
                 Some(mut process) => {
@@ -91,17 +84,12 @@ impl Queue for FIFO {
         }
     }
 
-    fn stop(&mut self) {
-        self.running = false;
-    }
-
     fn init() -> Self {
         Self {
             processes: vec![] ,
             current_process: None,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_millis(10),
-            running: false
         }
     }
 }
@@ -114,7 +102,6 @@ struct SPN {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl SPN {
@@ -130,7 +117,6 @@ struct FCFS {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl FCFS {
@@ -144,7 +130,6 @@ struct SJF {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl SJF {
@@ -160,7 +145,6 @@ struct HRRN {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl HRRN {
@@ -174,7 +158,6 @@ struct RR {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl RR {
@@ -188,7 +171,6 @@ struct SRF {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl SRF {
@@ -202,7 +184,6 @@ struct MLQ {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl MLQ {
@@ -215,7 +196,6 @@ struct MLFQ {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
-    running: bool,
 }
 
 impl MLFQ {
@@ -231,4 +211,5 @@ pub fn test() {
     println!("{:?}", &list_of_processes);
     fifo.processes.extend(list_of_processes);
     fifo.start();
+    sleep(Duration::from_secs(4));
 }
