@@ -68,11 +68,6 @@ impl Queue for FIFO {
 
             match self.dequeue() {
                 Some(mut process) => {
-
-                    if process.arrival_time > time_passed.elapsed() {
-                        sleep(process.arrival_time - time_passed.elapsed())
-                    }
-
                     self.current_process = Some(process);
                     self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
                     let result = self.current_process.as_mut().unwrap().run();
@@ -112,10 +107,59 @@ struct SPN {
     context_switch_duration: Duration,
 }
 
-impl SPN {
+impl Queue for SPN {
+    fn enqueue(&mut self, mut process: Process) {
+        process.status = ProcessStatus::Ready;
+        self.processes.push(process);
+    }
+    fn dequeue(&mut self) -> Option<Process> {
+        self.processes.sort_by_key(|p| p.cpu_burst_time);
+        if self.processes.is_empty() {
+            None
+        } else {
+            Some(self.processes.remove(0))
+        }
+    }
+    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+        self.current_time = Duration::from_millis(0);
+        let time_passed = Instant::now();
+        loop {  // in this loop we process all processes until there is no process left
+
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            match self.dequeue() {
+                Some(mut process) => {
+                    self.current_process = Some(process);
+                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    let result = self.current_process.as_mut().unwrap().run();
+                    match result {
+                        Ok(_) => {
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.current_time = time_passed.elapsed();
+                            println!("Process: {} Terminated At: {:?}", self.current_process.as_mut().unwrap().id ,self.current_time);
+                        },
+                        Err(_) => {}
+                    }
+                }
+                None => {}
+            }
+
+            sleep(self.context_switch_duration); // context switch process ...
+        }
+    }
+
+    fn init() -> Self {
+        SPN {
+            processes: vec![],
+            current_process: None,
+            current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_millis(10)
+        }
+    }
 }
-
-
 
 
 // FCFS Algorithm ----------------------------------------------------------------------------------
@@ -213,17 +257,17 @@ impl MLFQ {
 // Testing -----------------------------------------------------------------------------------------
 
 pub fn test() {
-    let mut fifo: FIFO = FIFO::init();
+    let mut spn: SPN = SPN::init();
     let mut list_of_processes = vec![build_test_process(), build_test_process(), build_test_process()];
     list_of_processes.sort_by_key(|p| p.arrival_time);
     println!("{:?}", &list_of_processes);
-    fifo.processes.extend(list_of_processes);
+    spn.processes.extend(list_of_processes);
 
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_clone = Arc::clone(&stop_flag);
 
     let handle = thread::spawn(move || {
-        fifo.start(stop_flag_clone); // Pass stop_flag to the start method
+        spn.start(stop_flag_clone); // Pass stop_flag to the start method
     });
 
     sleep(Duration::from_secs(5));

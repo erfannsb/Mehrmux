@@ -19,8 +19,8 @@ pub enum ProcessStatus {
 pub struct Process {
     pub id: Uuid,
     pub arrival_time: Duration,
-    priority: i32,
-    cpu_burst_time: Duration,
+    pub priority: i32,
+    pub cpu_burst_time: Duration,
     pub status: ProcessStatus
 }
 
