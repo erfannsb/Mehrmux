@@ -28,7 +28,7 @@ impl FIFO {
     fn run(&mut self) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
-        loop { // in this loop we process all processes until there is no process left
+        loop {                                             // in this loop we process all processes until there is no process left
             self.current_time = time_passed.elapsed();
 
             if self.queue.is_empty() {
@@ -71,8 +71,93 @@ impl Queue for FIFO {
 // SPN Algorithm -----------------------------------------------------------------------------------
 
 struct SPN {
-
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
 }
+
+impl SPN {
+}
+
+
+
+
+// FCFS Algorithm -----------------------------------------------------------------------------------
+struct FCFS {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl FCFS {
+}
+
+// SJF Algorithm ------------------------------------------------------------------------------------
+struct SJF {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl SJF {
+}
+
+
+
+// HRRN Algorithm -----------------------------------------------------------------------------------
+struct HRRN {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl HRRN {
+}
+
+
+// RR Algorithm -------------------------------------------------------------------------------------
+
+struct RR {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl RR {
+}
+
+// SRF Algorithm ------------------------------------------------------------------------------------
+struct SRF {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl SRF {
+}
+
+// MLQ Algorithm ------------------------------------------------------------------------------------
+struct MLQ {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl MLQ {
+}
+
+// MLFQ Algorithm -----------------------------------------------------------------------------------
+struct MLFQ {
+    queue: Vec<Process>,
+    current_process: Option<Process>,
+    current_time: Duration,
+}
+
+impl MLFQ {
+}
+
+
+
 
 pub fn test() {
     let mut fifo: FIFO = FIFO::init();
