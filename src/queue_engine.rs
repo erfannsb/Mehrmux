@@ -7,6 +7,9 @@ use crate::process_gen::{build_test_process, Process, ProcessStatus};
 trait  Queue {
     fn enqueue(&mut self,process: Process);
     fn dequeue(&mut self) -> Option<Process>;
+    fn start(&mut self);
+    fn stop(&mut self);
+    fn init() -> Self;
 }
 
 // Important Description ---------------------------------------------------------------------------
@@ -38,21 +41,29 @@ struct FIFO {
     running: bool,
 }
 
-impl FIFO {
-    fn init() -> Self {
-        Self {
-            processes: vec![] ,
-            current_process: None,
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_millis(10),
-            running: false
+impl Queue for FIFO {
+    fn enqueue(&mut self, mut process: Process) {
+        process.status = ProcessStatus::Ready;
+        self.processes.push(process)
+    }
+
+    fn dequeue(&mut self) -> Option<Process> {
+        if self.processes.is_empty() {
+            None
+        } else {
+            Some(self.processes.remove(0))
         }
     }
 
-    fn run(&mut self) {
+    fn start(&mut self) {
+        self.running = true;
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
+
+            if !self.running {
+                break
+            }
 
             match self.dequeue() {
                 Some(mut process) => {
@@ -79,19 +90,18 @@ impl FIFO {
             sleep(self.context_switch_duration); // context switch process ...
         }
     }
-}
 
-impl Queue for FIFO {
-    fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process)
+    fn stop(&mut self) {
+        self.running = false;
     }
 
-    fn dequeue(&mut self) -> Option<Process> {
-        if self.processes.is_empty() {
-            None
-        } else {
-            Some(self.processes.remove(0))
+    fn init() -> Self {
+        Self {
+            processes: vec![] ,
+            current_process: None,
+            current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_millis(10),
+            running: false
         }
     }
 }
@@ -220,5 +230,5 @@ pub fn test() {
     list_of_processes.sort_by_key(|p| p.arrival_time);
     println!("{:?}", &list_of_processes);
     fifo.processes.extend(list_of_processes);
-    fifo.run();
+    fifo.start();
 }
