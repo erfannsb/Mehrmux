@@ -1,7 +1,7 @@
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use crate::process_gen::{build_test_process, Process, ProcessStatus};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
@@ -92,7 +92,7 @@ impl Queue for FIFO {
             processes: vec![] ,
             current_process: None,
             current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_millis(10),
+            context_switch_duration: Duration::from_micros(5),
         }
     }
 }
@@ -156,7 +156,7 @@ impl Queue for SPN {
             processes: vec![],
             current_process: None,
             current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_millis(10)
+            context_switch_duration: Duration::from_micros(5),
         }
     }
 }
@@ -236,9 +236,62 @@ struct SJF {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
+    time_quantum: Duration,
 }
 
 impl SJF {
+    fn enqueue(&mut self, mut process: Process) {
+        process.status = ProcessStatus::Ready;
+        self.processes.push(process);
+    }
+    fn dequeue(&mut self) -> Option<Process> {
+        self.processes.sort_by_key(|p| p.cpu_burst_time);
+        if self.processes.is_empty() {
+            None
+        } else {
+            Some(self.processes.remove(0))
+        }
+    }
+    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+        self.current_time = Duration::from_millis(0);
+        let time_passed = Instant::now();
+        loop {  // in this loop we process all processes until there is no process left
+
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            match self.dequeue() {
+                Some(mut process) => {
+                    self.current_process = Some(process);
+                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    let result = self.current_process.as_mut().unwrap().run();
+                    match result {
+                        Ok(_) => {
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.current_time = time_passed.elapsed();
+                            println!("Process: {} Terminated At: {:?}", self.current_process.as_mut().unwrap().id ,self.current_time);
+                        },
+                        Err(_) => {}
+                    }
+                }
+                None => {}
+            }
+
+            sleep(self.context_switch_duration); // context switch process ...
+        }
+    }
+
+    fn init() -> Self {
+        SJF {
+            processes: vec![],
+            current_process: None,
+            current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_micros(5),
+            time_quantum: Duration::from_micros(10)
+        }
+    }
 }
 
 
@@ -274,7 +327,7 @@ impl Queue for HRRN {
             // });
 
             // Sort by response ratio in descending order
-            self.processes.sort_by(|a, b| b.response_ratio.partial_cmp(&a.response_ratio).unwrap());
+            //self.processes.sort_by(|a, b| b.response_ratio.partial_cmp(&a.response_ratio).unwrap());
 
             Some(self.processes.remove(0))
         }
@@ -316,7 +369,7 @@ impl Queue for HRRN {
     }
 
     fn init() -> Self {
-        Hrrn {
+        HRRN {
             processes: vec![],
             current_process: None,
             current_time: Duration::from_secs(0),
@@ -384,12 +437,12 @@ impl Queue for RR {
     }
 
     fn init() -> Self {
-        Self {
+        RR {
             processes: vec![] ,
             current_process: None,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration:: from_millis(10)
+            time_quantum: Duration:: from_micros(10)
         }
     }
 }
@@ -450,6 +503,46 @@ pub fn test() {
 
     sleep(Duration::from_secs(5));
     stop_flag.store(true, Ordering::Relaxed); // Set the stop flag after 5 seconds
+
+    handle.join().unwrap();
+}
+
+
+fn test_two() {
+    // Create a channel for communication
+    let (sender, receiver) = mpsc::channel();
+
+    // Start a thread that will "freeze" and "defrost"
+    let handle = thread::spawn(move || {
+        let mut count = 0;
+
+        loop {
+            // Print the count and then "freeze" by waiting for a message
+            println!("Count: {}", count);
+            count += 1;
+
+            // This is where the function "freezes" until a message is received
+            receiver.recv().unwrap();
+
+            // Simulate some processing
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+
+    // Let the program "defrost" the function after 3 seconds
+    thread::sleep(Duration::from_secs(3));
+    println!("Resuming function...");
+    sender.send(()).unwrap();
+
+    // Let the function run for a while, then pause it again after another 3 seconds
+    thread::sleep(Duration::from_secs(3));
+    println!("Pausing function...");
+    sender.send(()).unwrap();
+
+    // Let the function continue one more time
+    thread::sleep(Duration::from_secs(3));
+    println!("Resuming function again...");
+    sender.send(()).unwrap();
 
     handle.join().unwrap();
 }
