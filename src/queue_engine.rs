@@ -28,7 +28,7 @@ impl FIFO {
     fn run(&mut self) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
-        loop {                                             // in this loop we process all processes until there is no process left
+        loop {  // in this loop we process all processes until there is no process left
             self.current_time = time_passed.elapsed();
 
             if self.queue.is_empty() {
@@ -69,6 +69,7 @@ impl Queue for FIFO {
 }
 
 // SPN Algorithm -----------------------------------------------------------------------------------
+//Erfun
 
 struct SPN {
     queue: Vec<Process>,
@@ -82,7 +83,8 @@ impl SPN {
 
 
 
-// FCFS Algorithm -----------------------------------------------------------------------------------
+// FCFS Algorithm ----------------------------------------------------------------------------------
+// Meownoosh
 struct FCFS {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -92,7 +94,9 @@ struct FCFS {
 impl FCFS {
 }
 
-// SJF Algorithm ------------------------------------------------------------------------------------
+// SJF Algorithm -----------------------------------------------------------------------------------
+// Erfun
+
 struct SJF {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -104,7 +108,9 @@ impl SJF {
 
 
 
-// HRRN Algorithm -----------------------------------------------------------------------------------
+// HRRN Algorithm ----------------------------------------------------------------------------------
+// Meownoosh
+
 struct HRRN {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -115,8 +121,8 @@ impl HRRN {
 }
 
 
-// RR Algorithm -------------------------------------------------------------------------------------
-
+// RR Algorithm ------------------------------------------------------------------------------------
+// Meownoosh
 struct RR {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -126,7 +132,9 @@ struct RR {
 impl RR {
 }
 
-// SRF Algorithm ------------------------------------------------------------------------------------
+// SRF Algorithm -----------------------------------------------------------------------------------
+// Erfun
+
 struct SRF {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -136,7 +144,9 @@ struct SRF {
 impl SRF {
 }
 
-// MLQ Algorithm ------------------------------------------------------------------------------------
+// MLQ Algorithm -----------------------------------------------------------------------------------
+// Meownoosh
+
 struct MLQ {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -146,7 +156,8 @@ struct MLQ {
 impl MLQ {
 }
 
-// MLFQ Algorithm -----------------------------------------------------------------------------------
+// MLFQ Algorithm ----------------------------------------------------------------------------------
+// Erfun
 struct MLFQ {
     queue: Vec<Process>,
     current_process: Option<Process>,
@@ -157,7 +168,7 @@ impl MLFQ {
 }
 
 
-
+// Testing -----------------------------------------------------------------------------------------
 
 pub fn test() {
     let mut fifo: FIFO = FIFO::init();
