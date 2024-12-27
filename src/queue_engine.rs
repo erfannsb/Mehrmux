@@ -171,8 +171,62 @@ struct FCFS {
     context_switch_duration: Duration,
 }
 
-impl FCFS {
+
+impl Queue for FCFS {
+    fn enqueue(&mut self, mut process: Process) {
+        process.status = ProcessStatus::Ready;
+        self.processes.push(process)
+    }
+
+    fn dequeue(&mut self) -> Option<Process> {
+        if self.processes.is_empty() {
+            None
+        } else {
+            Some(self.processes.remove(0))
+        }
+    }
+
+    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+        self.current_time = Duration::from_millis(0);
+        let time_passed = Instant::now();
+        loop {  // in this loop we process all processes until there is no process left
+
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            match self.dequeue() {
+                Some(mut process) => {
+                    self.current_process = Some(process);
+                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    let result = self.current_process.as_mut().unwrap().run();
+                    match result {
+                        Ok(_) => {
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.current_time = time_passed.elapsed();
+                            println!("Process: {} Terminated At: {:?}", self.current_process.as_mut().unwrap().id ,self.current_time);
+                        },
+                        Err(_) => {}
+                    }
+                }
+                None => {}
+            }
+
+            sleep(self.context_switch_duration); // context switch process ...
+        }
+    }
+
+    fn init() -> Self {
+        Self {
+            processes: vec![] ,
+            current_process: None,
+            current_time: Duration::from_secs(0),
+            context_switch_duration: Duration::from_millis(10),
+        }
+    }
 }
+
 
 // SJF Algorithm -----------------------------------------------------------------------------------
 // Erfun
