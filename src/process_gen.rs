@@ -17,7 +17,7 @@ pub enum ProcessStatus {
 
 #[derive(Debug)]
 pub struct Process {
-    id: Uuid,
+    pub id: Uuid,
     pub arrival_time: Duration,
     priority: i32,
     cpu_burst_time: Duration,
