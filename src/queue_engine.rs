@@ -1,7 +1,7 @@
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use crate::process_gen::{build_test_process, Process, ProcessStatus};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
@@ -317,7 +317,7 @@ impl Queue for HRRN {
         if self.processes.is_empty() {
             None
         } else {
-            let time_elapsed = self.current_time.as_secs() as u32;
+            // let time_elapsed = self.current_time.as_secs() as u32;
 
             // Calculate response ratio
             // self.processes.iter_mut().for_each(|process| {
@@ -446,6 +446,7 @@ impl Queue for RR {
         }
     }
 }
+
 // SRF Algorithm -----------------------------------------------------------------------------------
 // Erfun
 
@@ -507,42 +508,18 @@ pub fn test() {
     handle.join().unwrap();
 }
 
+pub fn test_two() {
+    let mut process = build_test_process();
 
-fn test_two() {
-    // Create a channel for communication
-    let (sender, receiver) = mpsc::channel();
+    let stop_flag = Arc::new(AtomicBool::new(true));
+    let stop_flag_clone = Arc::clone(&stop_flag);
 
-    // Start a thread that will "freeze" and "defrost"
+
     let handle = thread::spawn(move || {
-        let mut count = 0;
-
-        loop {
-            // Print the count and then "freeze" by waiting for a message
-            println!("Count: {}", count);
-            count += 1;
-
-            // This is where the function "freezes" until a message is received
-            receiver.recv().unwrap();
-
-            // Simulate some processing
-            thread::sleep(Duration::from_secs(1));
-        }
+        process.run_with_interrupt(stop_flag_clone);
     });
 
-    // Let the program "defrost" the function after 3 seconds
-    thread::sleep(Duration::from_secs(3));
-    println!("Resuming function...");
-    sender.send(()).unwrap();
-
-    // Let the function run for a while, then pause it again after another 3 seconds
-    thread::sleep(Duration::from_secs(3));
-    println!("Pausing function...");
-    sender.send(()).unwrap();
-
-    // Let the function continue one more time
-    thread::sleep(Duration::from_secs(3));
-    println!("Resuming function again...");
-    sender.send(()).unwrap();
-
+    sleep(Duration::from_secs(1));
+    stop_flag.store(false, Ordering::Relaxed); // Set the stop flag after 5 seconds
     handle.join().unwrap();
 }
