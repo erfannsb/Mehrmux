@@ -66,9 +66,6 @@ impl Process {
     }
 
     pub fn run(&mut self) -> Result<(), ProcessErrors> {
-        // calculate waiting time
-        self.calculate_waiting_time();
-
         //simulating process work ...
         sleep(self.cpu_burst_time);
         Ok(())  // Returns Ok(()) if there is no error
