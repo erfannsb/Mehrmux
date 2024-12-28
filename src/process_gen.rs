@@ -17,6 +17,13 @@ pub enum ProcessStatus {
     Terminated
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ProcessType {
+    SystemProcess,
+    InteractiveProcess,
+    BatchProcess
+}
+
 #[derive(Debug, Clone)]
 pub struct Process {
     pub id: Uuid,
@@ -26,6 +33,7 @@ pub struct Process {
     pub status: ProcessStatus,
     pub waiting_time: Duration,
     pub processed_time: Duration,
+    pub process_type: ProcessType,
     pub last_execution: Option<Instant>,
 }
 
@@ -70,7 +78,8 @@ impl Process {
         sleep(self.cpu_burst_time);
         Ok(())  // Returns Ok(()) if there is no error
     }
-    pub fn new(priority: i32, cbt: Duration) -> Self {
+
+    pub fn new(priority: i32, cbt: Duration, process_type: ProcessType) -> Self {
         Process {
             id: Uuid::new_v4(),
             priority,
@@ -80,14 +89,17 @@ impl Process {
             processed_time: Duration::from_secs(0),
             waiting_time: Duration::from_secs(0),
             last_execution: None,
+            process_type,
         }
     }
 }
 
 pub fn build_test_process() -> Process {
     let mut rng = thread_rng();
+    let process_variants = [ProcessType::BatchProcess, ProcessType::SystemProcess, ProcessType::SystemProcess];
     Process::new(
         rng.gen_range(1..10),
         Duration::from_millis(rng.gen_range(0..500)),
+        process_variants[rng.gen_range(0..process_variants.len())]
     )
 }

@@ -1,6 +1,6 @@
 use std::thread::{sleep};
 use std::time::{Duration, Instant};
-use crate::process_gen::{build_test_process, Process, ProcessStatus};
+use crate::process_gen::{build_test_process, Process, ProcessStatus, ProcessType};
 use std::sync::{Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -172,7 +172,7 @@ struct FCFS {
     context_switch_duration: Duration,
 }
 
-impl Queue for FCFS {
+impl FCFS {
     fn enqueue(&mut self, mut process: Process) {
         process.status = ProcessStatus::Ready;
         self.processes.push(process)
@@ -192,6 +192,37 @@ impl Queue for FCFS {
         loop {  // in this loop we process all processes until there is no process left
 
             if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            match self.dequeue() {
+                Some(mut process) => {
+                    self.current_process = Some(process);
+                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    let result = self.current_process.as_mut().unwrap().run();
+                    match result {
+                        Ok(_) => {
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.current_time = time_passed.elapsed();
+                            println!("Process: {} Terminated At: {:?}", self.current_process.as_mut().unwrap().id ,self.current_time);
+                        },
+                        Err(_) => {}
+                    }
+                }
+                None => {}
+            }
+
+            sleep(self.context_switch_duration); // context switch process ...
+        }
+    }
+
+    fn start_and_end(&mut self) {
+        self.current_time = Duration::from_millis(0);
+        let time_passed = Instant::now();
+        loop {
+
+            if self.processes.is_empty() {
                 println!("Loop stopped.");
                 break;
             }
@@ -414,6 +445,42 @@ impl RR {
                 break;
             }
 
+            if let Some(mut process) = self.dequeue() {
+                process.status = ProcessStatus::Running;
+                let result = process.run_with_interrupt(self.time_quantum);
+
+                match result {
+                    Ok(_) => {
+                        if process.processed_time == process.cpu_burst_time {
+                            process.status = ProcessStatus::Terminated;
+                            println!("process id: {}, terminated, cbt: {:?}, pt: {:?}", process.id, process.cpu_burst_time, process.processed_time)
+                        } else {
+                            process.status = ProcessStatus::Waiting;
+                            println!("process id: {}, is waiting, cbt: {:?}, pt: {:?}", process.id, process.cpu_burst_time, process.processed_time);
+                            self.processes.push(process); // push process to the end of the processes vector
+                        }
+                    }
+                    Err(_) => {
+                        eprintln!("Error running process {:?}", process.id);
+                    }
+                }
+            } else {
+                println!("No processes left to process.");
+                break;
+            }
+
+            sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
+        }
+    }
+
+    fn start_and_end(&mut self) {
+        self.current_time = Duration::from_millis(0);
+
+        loop {
+            if self.processes.is_empty() {
+                println!("Loop stopped.");
+                break;
+            }
 
             if let Some(mut process) = self.dequeue() {
                 process.status = ProcessStatus::Running;
@@ -442,6 +509,7 @@ impl RR {
             sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
         }
     }
+
     fn init() -> Self {
         RR {
             processes: vec![] ,
@@ -540,13 +608,44 @@ impl SRF {
 // Meownoosh
 
 struct MLQ {
-    processes: Vec<Process>,
-    current_process: Option<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
+    queue_1: RR,
+    queue_2: RR,
+    queue_3: FCFS,
 }
 
 impl MLQ {
+    fn init() -> Self {
+        MLQ {
+            queue_1: RR::init(),
+            queue_2: RR::init(),
+            queue_3: FCFS::init()
+        }
+    }
+    fn enqueue(&mut self, process: Process) {
+        match process.process_type {
+            ProcessType::SystemProcess => self.queue_1.enqueue(process),
+            ProcessType::InteractiveProcess => self.queue_2.enqueue(process),
+            ProcessType::BatchProcess => self.queue_3.enqueue(process)
+        }
+    }
+
+    fn start(&mut self,  stop_flag: Arc<AtomicBool>) {
+        loop {
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+            if !self.queue_1.processes.is_empty() {
+                self.queue_1.start_and_end();
+            }
+            else if !self.queue_2.processes.is_empty() {
+                self.queue_2.start_and_end();
+            }
+            else if !self.queue_3.processes.is_empty() {
+                self.queue_3.start_and_end();
+            }
+        }
+    }
 }
 
 // MLFQ Algorithm ----------------------------------------------------------------------------------
@@ -559,17 +658,26 @@ struct MLFQ {
 }
 
 impl MLFQ {
+
 }
 
 
 // Testing -----------------------------------------------------------------------------------------
 
 pub fn test() {
-    let mut sjf = SRF::init();
-    let mut list_of_processes = vec![build_test_process(), build_test_process(), build_test_process()];
-    list_of_processes.sort_by_key(|p| p.arrival_time);
-    println!("{:?}", &list_of_processes);
-    sjf.processes.extend(list_of_processes);
+    let mut sjf = MLQ::init();
+    let mut list_of_processes1 = vec![build_test_process(), build_test_process(), build_test_process()];
+    let mut list_of_processes2 = vec![build_test_process(), build_test_process(), build_test_process()];
+    let mut list_of_processes3 = vec![build_test_process(), build_test_process(), build_test_process()];
+    list_of_processes1.sort_by_key(|p| p.arrival_time);
+    list_of_processes2.sort_by_key(|p| p.arrival_time);
+    list_of_processes3.sort_by_key(|p| p.arrival_time);
+    println!("{:?}", &list_of_processes1);
+    println!("{:?}", &list_of_processes2);
+    println!("{:?}", &list_of_processes3);
+    sjf.queue_1.processes.extend(list_of_processes1);
+    sjf.queue_2.processes.extend(list_of_processes2);
+    sjf.queue_3.processes.extend(list_of_processes3);
 
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_clone = Arc::clone(&stop_flag);
