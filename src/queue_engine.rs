@@ -5,16 +5,6 @@ use std::sync::{Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-// Common Queueing Sense ---------------------------------------------------------------------------
-
-trait  Queue {
-    fn enqueue(&mut self,process: Process); // to add a process to the queue
-    fn dequeue(&mut self) -> Option<Process>; // to remove and return a process from queue
-    fn start(&mut self, stop_flag: Arc<AtomicBool>); // to start running the queue
-    fn init() -> Self; // to initiate an instant of queue
-}
-
-
 // Important Description ---------------------------------------------------------------------------
 //All queue structs should have these properties:
 
@@ -43,7 +33,7 @@ struct FIFO {
     context_switch_duration: Duration,
 }
 
-impl Queue for FIFO {
+impl FIFO {
     fn enqueue(&mut self, mut process: Process) {
         process.status = ProcessStatus::Ready;
         self.processes.push(process)
@@ -108,7 +98,7 @@ struct SPN {
     context_switch_duration: Duration,
 }
 
-impl Queue for SPN {
+impl SPN {
     fn enqueue(&mut self, mut process: Process) {
         process.status = ProcessStatus::Ready;
         self.processes.push(process);
@@ -415,6 +405,7 @@ impl HRRN {
 
 // RR Algorithm ------------------------------------------------------------------------------------
 // Meownoosh
+
 struct RR {
     processes: Vec<Process>,
     current_time: Duration,
@@ -650,6 +641,7 @@ impl MLQ {
 
 // MLFQ Algorithm ----------------------------------------------------------------------------------
 // Erfun
+
 struct MLFQ {
     processes: Vec<Process>,
     current_process: Option<Process>,
@@ -666,18 +658,11 @@ impl MLFQ {
 
 pub fn test() {
     let mut sjf = MLQ::init();
-    let mut list_of_processes1 = vec![build_test_process(), build_test_process(), build_test_process()];
-    let mut list_of_processes2 = vec![build_test_process(), build_test_process(), build_test_process()];
-    let mut list_of_processes3 = vec![build_test_process(), build_test_process(), build_test_process()];
-    list_of_processes1.sort_by_key(|p| p.arrival_time);
-    list_of_processes2.sort_by_key(|p| p.arrival_time);
-    list_of_processes3.sort_by_key(|p| p.arrival_time);
-    println!("{:?}", &list_of_processes1);
-    println!("{:?}", &list_of_processes2);
-    println!("{:?}", &list_of_processes3);
-    sjf.queue_1.processes.extend(list_of_processes1);
-    sjf.queue_2.processes.extend(list_of_processes2);
-    sjf.queue_3.processes.extend(list_of_processes3);
+    sjf.enqueue(build_test_process());
+    sjf.enqueue(build_test_process());
+    sjf.enqueue(build_test_process());
+    sjf.enqueue(build_test_process());
+    sjf.enqueue(build_test_process());
 
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_clone = Arc::clone(&stop_flag);
@@ -686,7 +671,7 @@ pub fn test() {
         sjf.start(stop_flag_clone); // Pass stop_flag to the start method
     });
 
-    sleep(Duration::from_secs(5));
+    sleep(Duration::from_secs(10));
     stop_flag.store(true, Ordering::Relaxed); // Set the stop flag after 5 seconds
 
     handle.join().unwrap();
