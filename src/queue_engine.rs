@@ -501,6 +501,44 @@ impl RR {
         }
     }
 
+    fn start_and_return(&mut self) -> Option<Process>{
+        self.current_time = Duration::from_millis(0);
+
+        loop {
+            if self.processes.is_empty() {
+                println!("Loop stopped.");
+                return None;
+            }
+
+            if let Some(mut process) = self.dequeue() {
+                process.status = ProcessStatus::Running;
+                let result = process.run_with_interrupt(self.time_quantum);
+
+                match result {
+                    Ok(_) => {
+                        if process.processed_time == process.cpu_burst_time {
+                            process.status = ProcessStatus::Terminated;
+                            println!("process id: {}, terminated, cbt: {:?}, pt: {:?}", process.id, process.cpu_burst_time, process.processed_time)
+                        } else {
+                            process.status = ProcessStatus::Waiting;
+                            println!("process id: {}, is waiting, cbt: {:?}, pt: {:?}", process.id, process.cpu_burst_time, process.processed_time);
+                            return Some(process);
+                        }
+                    }
+                    Err(_) => {
+                        eprintln!("Error running process {:?}", process.id);
+                    }
+                }
+            } else {
+                println!("No processes left to process.");
+                return None;
+            }
+
+            sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
+        }
+
+    }
+
     fn init() -> Self {
         RR {
             processes: vec![] ,
@@ -535,6 +573,15 @@ impl SRF {
             p1_remaining_time.partial_cmp(&p2_remaining_time).unwrap_or(std::cmp::Ordering::Equal)
         });
         self.processes.first_mut() // Return a mutable reference.
+    }
+
+    fn dequeue_remove(&mut self) -> Option<Process> {
+        self.processes.sort_by(|p1, p2| {
+            let p1_remaining_time = p1.cpu_burst_time - p1.processed_time;
+            let p2_remaining_time = p2.cpu_burst_time - p2.processed_time;
+            p1_remaining_time.partial_cmp(&p2_remaining_time).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        Some(self.processes.remove(0))
     }
 
     fn start(&mut self, stop_flag: Arc<AtomicBool>) {
@@ -583,6 +630,50 @@ impl SRF {
             sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
         }
     }
+
+    fn start_and_return(&mut self) -> Option<Process> {
+        self.current_time = Duration::from_millis(0);
+
+        loop {
+            if self.processes.is_empty() {
+                println!("Loop stopped.");
+                return None;
+            }
+
+            if let Some(mut process) = self.dequeue_remove() {
+                process.status = ProcessStatus::Running;
+                let result = process.run_with_interrupt(self.time_quantum);
+
+                match result {
+                    Ok(_) => {
+                        if process.processed_time == process.cpu_burst_time {
+                            process.status = ProcessStatus::Terminated;
+                            println!(
+                                "process id: {}, terminated, cbt: {:?}, pt: {:?}",
+                                process.id, process.cpu_burst_time, process.processed_time
+                            );
+                        } else {
+                            process.status = ProcessStatus::Waiting;
+                            println!(
+                                "process id: {}, is waiting, cbt: {:?}, pt: {:?}",
+                                process.id, process.cpu_burst_time, process.processed_time
+                            );
+                            return Some(process); // Return the process without borrowing.
+                        }
+                    }
+                    Err(_) => {
+                        eprintln!("Error running process {:?}", process.id);
+                    }
+                }
+            } else {
+                println!("No processes left to process.");
+                return None;
+            }
+
+            sleep(self.context_switch_duration); // Hypothetical Context Switching Process...
+        }
+    }
+
 
     fn init() -> Self {
         Self {
@@ -643,21 +734,74 @@ impl MLQ {
 // Erfun
 
 struct MLFQ {
-    processes: Vec<Process>,
-    current_process: Option<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
+    queue_1: SRF,
+    queue_2: RR,
+    queue_3: SRF
 }
 
 impl MLFQ {
+    fn init()-> Self {
+        let mut srf1 = SRF::init();
+        srf1.time_quantum = Duration::from_millis(30);
+        let mut rr2 = RR::init();
+        rr2.time_quantum = Duration::from_millis(50);
+        let mut srf3 = SRF::init();
+        srf3.time_quantum = Duration::from_millis(100);
 
+        MLFQ{
+            queue_1: srf1,
+            queue_2: rr2,
+            queue_3: srf3,
+        }
+    }
+
+    fn enqueue(&mut self, process: Process) {
+        self.queue_1.enqueue(process);
+    }
+
+    fn start(&mut self, stop_flag: Arc<AtomicBool>) {
+        loop {
+            if stop_flag.load(Ordering::Relaxed) {
+                println!("Loop stopped.");
+                break;
+            }
+
+            if !self.queue_1.processes.is_empty() {
+                let process = self.queue_1.start_and_return();
+                if let Some(process) = process {
+                    self.queue_2.enqueue(process)
+                }
+            }
+            else if !self.queue_2.processes.is_empty() {
+                let process = self.queue_2.start_and_return();
+                if let Some(process) = process {
+                    if process.waiting_time >= process.cpu_burst_time {
+                        self.queue_1.enqueue(process)
+                    } else{
+                        self.queue_2.enqueue(process)
+
+                    }
+                }
+            }
+            else if !self.queue_3.processes.is_empty() {
+                let process = self.queue_3.start_and_return();
+                if let Some(process) = process {
+                    if process.waiting_time >= process.cpu_burst_time {
+                        self.queue_2.enqueue(process)
+                    } else{
+                        self.queue_3.enqueue(process)
+                    }
+                }
+            }
+        }
+    }
 }
 
 
 // Testing -----------------------------------------------------------------------------------------
 
 pub fn test() {
-    let mut sjf = MLQ::init();
+    let mut sjf = MLFQ::init();
     sjf.enqueue(build_test_process());
     sjf.enqueue(build_test_process());
     sjf.enqueue(build_test_process());
