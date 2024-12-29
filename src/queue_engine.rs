@@ -26,7 +26,7 @@ use std::thread;
 
 // FIFO Algorithm ----------------------------------------------------------------------------------
 
-struct FIFO {
+pub struct FIFO {
     processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
@@ -34,7 +34,7 @@ struct FIFO {
 }
 
 impl FIFO {
-    fn enqueue(&mut self, mut process: Process) {
+    pub(crate) fn enqueue(&mut self, mut process: Process) {
         process.status = ProcessStatus::Ready;
         self.processes.push(process)
     }
@@ -47,7 +47,7 @@ impl FIFO {
         }
     }
 
-    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
@@ -78,7 +78,7 @@ impl FIFO {
         }
     }
 
-    fn init() -> Self {
+    pub fn init() -> Self {
         Self {
             processes: vec![] ,
             current_process: None,
@@ -91,7 +91,7 @@ impl FIFO {
 // SPN Algorithm -----------------------------------------------------------------------------------
 //Erfun
 
-struct SPN {
+pub struct SPN {
     processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
@@ -111,7 +111,7 @@ impl SPN {
             Some(self.processes.remove(0))
         }
     }
-    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
@@ -142,7 +142,7 @@ impl SPN {
         }
     }
 
-    fn init() -> Self {
+    pub fn init() -> Self {
         SPN {
             processes: vec![],
             current_process: None,
@@ -155,7 +155,7 @@ impl SPN {
 // FCFS Algorithm ----------------------------------------------------------------------------------
 // Meownoosh
 
-struct FCFS {
+pub struct FCFS {
     processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
@@ -176,7 +176,7 @@ impl FCFS {
         }
     }
 
-    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
@@ -238,7 +238,7 @@ impl FCFS {
         }
     }
 
-    fn init() -> Self {
+    pub fn init() -> Self {
         Self {
             processes: vec![] ,
             current_process: None,
@@ -251,7 +251,7 @@ impl FCFS {
 // SJF Algorithm -----------------------------------------------------------------------------------
 // Erfun
 
-struct SJF {
+pub struct SJF {
     processes: Vec<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
@@ -268,7 +268,7 @@ impl SJF {
         self.processes.first_mut() // Return a mutable reference.
     }
 
-    fn start(&mut self, stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
 
         loop {
@@ -316,7 +316,7 @@ impl SJF {
     }
 
 
-    fn init() -> Self {
+    pub(crate) fn init() -> Self {
         SJF {
             processes: vec![],
             current_time: Duration::from_secs(0),
@@ -329,7 +329,7 @@ impl SJF {
 // HRRN Algorithm ----------------------------------------------------------------------------------
 // Meownoosh
 
-struct HRRN {
+pub struct HRRN {
     processes: Vec<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
@@ -363,7 +363,7 @@ impl HRRN {
         }
     }
 
-    fn start(&mut self ,stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
         let time_passed = Instant::now();
         loop {  // in this loop we process all processes until there is no process left
@@ -392,7 +392,7 @@ impl HRRN {
         }
     }
 
-    fn init() -> Self {
+    pub(crate) fn init() -> Self {
         HRRN {
             processes: vec![],
             current_time: Duration::from_secs(0),
@@ -406,7 +406,7 @@ impl HRRN {
 // RR Algorithm ------------------------------------------------------------------------------------
 // Meownoosh
 
-struct RR {
+pub struct RR {
     processes: Vec<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
@@ -427,7 +427,7 @@ impl RR {
         }
     }
 
-    fn start(&mut self, stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
 
         loop {
@@ -539,7 +539,7 @@ impl RR {
 
     }
 
-    fn init() -> Self {
+    pub(crate) fn init() -> Self {
         RR {
             processes: vec![] ,
             current_time: Duration::from_secs(0),
@@ -552,7 +552,7 @@ impl RR {
 // SRF Algorithm -----------------------------------------------------------------------------------
 // Erfun
 
-struct SRF {
+pub struct SRF {
     processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
@@ -584,7 +584,7 @@ impl SRF {
         Some(self.processes.remove(0))
     }
 
-    fn start(&mut self, stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         self.current_time = Duration::from_millis(0);
 
         loop {
@@ -675,7 +675,7 @@ impl SRF {
     }
 
 
-    fn init() -> Self {
+    pub(crate) fn init() -> Self {
         Self {
             processes: vec![] ,
             current_process: None,
@@ -689,14 +689,14 @@ impl SRF {
 // MLQ Algorithm -----------------------------------------------------------------------------------
 // Meownoosh
 
-struct MLQ {
+pub struct MLQ {
     queue_1: RR,
     queue_2: RR,
     queue_3: FCFS,
 }
 
 impl MLQ {
-    fn init() -> Self {
+    pub(crate) fn init() -> Self {
         MLQ {
             queue_1: RR::init(),
             queue_2: RR::init(),
@@ -711,7 +711,7 @@ impl MLQ {
         }
     }
 
-    fn start(&mut self,  stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         loop {
             if stop_flag.load(Ordering::Relaxed) {
                 println!("Loop stopped.");
@@ -733,14 +733,14 @@ impl MLQ {
 // MLFQ Algorithm ----------------------------------------------------------------------------------
 // Erfun
 
-struct MLFQ {
+pub struct MLFQ {
     queue_1: SRF,
     queue_2: RR,
     queue_3: SRF
 }
 
 impl MLFQ {
-    fn init()-> Self {
+    pub(crate) fn init() -> Self {
         let mut srf1 = SRF::init();
         srf1.time_quantum = Duration::from_millis(30);
         let mut rr2 = RR::init();
@@ -759,7 +759,7 @@ impl MLFQ {
         self.queue_1.enqueue(process);
     }
 
-    fn start(&mut self, stop_flag: Arc<AtomicBool>) {
+    pub(crate) fn start(&mut self, stop_flag: Arc<AtomicBool>) {
         loop {
             if stop_flag.load(Ordering::Relaxed) {
                 println!("Loop stopped.");

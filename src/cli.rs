@@ -68,15 +68,15 @@ pub fn test() {
             .unwrap();
 
         let queue_selection_options = vec![
-            Queues::FIFO,
-            Queues::SPN,
-            Queues::FCFS,
-            Queues::SJF,
-            Queues::HRRN,
-            Queues::RR,
-            Queues::SRF,
-            Queues::MLQ,
-            Queues::MLFQ,
+            "FIFO",
+            "SPN",
+            "FCFS",
+            "SJF",
+            "HRRN",
+            "RR",
+            "SRF",
+            "MLQ",
+            "MLFQ"
         ];
 
 
