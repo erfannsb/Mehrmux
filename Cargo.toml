@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
+rand_distr = "0.4"
+dialoguer = "0.10"
+
 [dependencies.uuid]
 version = "1.11.0"
 features = [
