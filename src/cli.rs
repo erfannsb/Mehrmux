@@ -1,6 +1,7 @@
 use dialoguer::{theme::ColorfulTheme, Select, Input, Validator};
 use std::fmt;
 use std::io::Write;
+use crate::simulator::Simulator;
 
 pub enum Queues {
     FIFO,
@@ -44,7 +45,7 @@ fn print_variable(n_p: i32, sim_time: i32, queue: Option<Queues>) {
     println!("--------------------------");
 }
 
-pub fn test() {
+pub fn run() {
     clear_console();
     println!("💻 Operating System Queueing Simulation");
     let mut n_p: i32 = 0;
@@ -56,7 +57,6 @@ pub fn test() {
         let options = vec![
             "Enter Number Of Processes",
             "Select Queuing Algorithm",
-            "Enter Simulation Time (In Seconds)",
             "Run The Simulation",
             "Exit",
         ];
@@ -98,29 +98,23 @@ pub fn test() {
                     .unwrap();
             }
             2 => {
-                sim_time = Input::new()
-                    .with_prompt("Enter Simulation Time (In Seconds)")
-                    .report(false)
-                    .interact_text()
-                    .unwrap();
-            }
-            3 => {
                 clear_console();
                 let selected_queue = match queue {
-                    0 => Some(Queues::FIFO),
-                    1 => Some(Queues::SPN),
-                    2 => Some(Queues::FCFS),
-                    3 => Some(Queues::SJF),
-                    4 => Some(Queues::HRRN),
-                    5 => Some(Queues::RR),
-                    6 => Some(Queues::SRF),
-                    7 => Some(Queues::MLQ),
-                    8 => Some(Queues::MLFQ),
-                    _ => None
+                    0 => Queues::FIFO,
+                    1 => Queues::SPN,
+                    2 => Queues::FCFS,
+                    3 => Queues::SJF,
+                    4 => Queues::HRRN,
+                    5 => Queues::RR,
+                    6 => Queues::SRF,
+                    7 => Queues::MLQ,
+                    8 => Queues::MLFQ,
+                    _ => Queues::FIFO
                 };
-                print_variable(n_p, sim_time, selected_queue);
+                let sim = Simulator::init(0.01, 0.001);
+                sim.run_simulate(n_p, selected_queue);
             }
-            4 => {}
+            3 => {return}
             _ => println!("Invalid selection."),
         }
     }

@@ -56,7 +56,7 @@ pub struct Simulator {
 }
 
 impl Simulator {
-    fn run_simulate(self, num_of_processes: i32, sim_time: i32, queue_type: Queues) {
+    pub(crate) fn run_simulate(self, num_of_processes: i32, queue_type: Queues) {
         let lambda_rate_arrival = self.lambda_rate_arrival.clone();
         let lambda_rate_cbt = self.lambda_rate_cbt.clone();
         // Wrap 'self' in Arc and Mutex
@@ -65,106 +65,117 @@ impl Simulator {
         // Wrap 'queue_type' in Arc
         let queue_type_arc = Arc::new(queue_type);
 
-        let stop_flag = Arc::new(AtomicBool::new(false));
-        let stop_flag_clone = Arc::clone(&stop_flag);
-        let stop_flag_clone_second = Arc::clone(&stop_flag);
+        // generating random numbers:
+        let exp_for_arrival = ExponentialGenerator::new(lambda_rate_arrival);
+        let exp_for_cbt = ExponentialGenerator::new(lambda_rate_cbt);
+        let mut arrival_randoms = exp_for_arrival.unwrap().generate_accumulative(num_of_processes as usize);
+        let mut generated_random_numbers: Vec<(f64, f64)> = Vec::with_capacity(num_of_processes as usize);
+        for element in arrival_randoms {
+            let cpu_burst_time = exp_for_cbt.as_ref().unwrap().generate();
+            generated_random_numbers.push((element, cpu_burst_time));
+        }
 
-        // Start first thread
-        let handle = thread::spawn({
-            let self_arc = Arc::clone(&self_arc);
-            let queue_type_arc = Arc::clone(&queue_type_arc); // Clone the Arc
-            move || {
-
-                loop {
-                    if stop_flag_clone.load(Ordering::Relaxed) {
-                        break;
-                    }
-                    let mut self_locked = self_arc.lock().unwrap();
-                    match *queue_type_arc {
-                        Queues::FIFO => self_locked.fifo.start(),
-                        Queues::SPN => self_locked.spn.start(),
-                        Queues::FCFS => self_locked.fcfs.start(),
-                        Queues::SJF => self_locked.sjf.start(),
-                        Queues::HRRN => self_locked.hrrn.start(),
-                        Queues::RR => self_locked.rr.start(),
-                        Queues::SRF => self_locked.srf.start(),
-                        Queues::MLQ => self_locked.mlq.start(),
-                        Queues::MLFQ => self_locked.mlfq.start(),
-                    }
-                    drop(self_locked);
-                    sleep(Duration::from_millis(100));
-                }
-
+        let right_now = Instant::now();
+        let mut current_time = Duration::from_millis(0);
+        let mut self_locked = self_arc.lock().unwrap();
+        println!("-------------------------------------------------");
+        println!("Generating Random Processes");
+        loop {
+            if generated_random_numbers.is_empty() {
+                break;
             }
-        });
-
-
-        // Start second thread
-        let handle2 = thread::spawn({
-            let self_arc = Arc::clone(&self_arc);
-            let queue_type_arc = Arc::clone(&queue_type_arc); // Clone the Arc
-            move || {
-                // generating random numbers:
-                let exp_for_arrival = ExponentialGenerator::new(lambda_rate_arrival);
-                let exp_for_cbt = ExponentialGenerator::new(lambda_rate_cbt);
-                let mut arrival_randoms = exp_for_arrival.unwrap().generate_accumulative(num_of_processes as usize);
-                let mut generated_random_numbers: Vec<(f64, f64)> = Vec::with_capacity(num_of_processes as usize);
-                for element in arrival_randoms {
-                    let cpu_burst_time = exp_for_cbt.as_ref().unwrap().generate();
-                    generated_random_numbers.push((element, cpu_burst_time));
+            current_time = right_now.elapsed();
+            // Check if it's time to process the next process
+            if current_time >= Duration::from_millis(generated_random_numbers.get(0).unwrap().0 as u64) {
+                let random_numbers = generated_random_numbers.remove(0);
+                let process = Process::new(Duration::from_millis(random_numbers.1 as u64));
+                println!("🔻 Process Entered The Queue: id: {}, at: {:?}", &process.clone().id.to_string()[0..7].to_string(), current_time);
+                // Process according to the queue type
+                match *queue_type_arc {
+                    Queues::FIFO => self_locked.fifo.enqueue(process),
+                    Queues::SPN => self_locked.spn.enqueue(process),
+                    Queues::FCFS => self_locked.fcfs.enqueue(process),
+                    Queues::SJF => self_locked.sjf.enqueue(process),
+                    Queues::HRRN => self_locked.hrrn.enqueue(process),
+                    Queues::RR => self_locked.rr.enqueue(process),
+                    Queues::SRF => self_locked.srf.enqueue(process),
+                    Queues::MLQ => self_locked.mlq.enqueue(process),
+                    Queues::MLFQ => self_locked.mlfq.enqueue(process),
                 }
-
-                let right_now = Instant::now();
-                let mut current_time = Duration::from_millis(0);
-                let mut self_locked = self_arc.lock().unwrap();
-                println!("-------------------------------------------------");
-                println!("Generating Random Processes");
-                loop {
-
-                    // Check stop flag to exit loop
-                    if stop_flag_clone_second.load(Ordering::Relaxed) {
-                        break;
-                    }
-
-                    if generated_random_numbers.is_empty() {
-                        break;
-                    }
-                    current_time = right_now.elapsed();
-                    // Check if it's time to process the next process
-                    if current_time >= Duration::from_millis(generated_random_numbers.get(0).unwrap().0 as u64) {
-                        let random_numbers = generated_random_numbers.remove(0);
-                        let process = Process::new(Duration::from_millis(random_numbers.1 as u64));
-                        println!("🔻 Process Entered The Queue: id: {}, at: {:?}", &process.clone().id.to_string()[0..7].to_string(), current_time);
-                        // Process according to the queue type
-                        match *queue_type_arc {
-                            Queues::FIFO => self_locked.fifo.enqueue(process),
-                            Queues::SPN => self_locked.spn.enqueue(process),
-                            Queues::FCFS => self_locked.fcfs.enqueue(process),
-                            Queues::SJF => self_locked.sjf.enqueue(process),
-                            Queues::HRRN => self_locked.hrrn.enqueue(process),
-                            Queues::RR => self_locked.rr.enqueue(process),
-                            Queues::SRF => self_locked.srf.enqueue(process),
-                            Queues::MLQ => self_locked.mlq.enqueue(process),
-                            Queues::MLFQ => self_locked.mlfq.enqueue(process),
-                        }
-                    }
-                }
-
-                println!("-------------------------------------------------");
-                println!("Starting The Queue");
             }
-        });
+        }
 
-        // Sleep for a specified time and then set the stop flag
-        sleep(Duration::from_secs(sim_time as u64));
-        stop_flag.store(true, Ordering::Relaxed); // Set the stop flag
+        println!("-------------------------------------------------");
+        println!("Starting The Queue");
 
-        // Wait for both threads to complete
-        handle.join().unwrap();
-        handle2.join().unwrap();
+        match *queue_type_arc {
+            Queues::FIFO => {
+                self_locked.fifo.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                 self_locked.fifo.metrics.TotalWaitingTime / num_of_processes as u32,
+                 self_locked.fifo.metrics.TotalTime / num_of_processes as u32,
+                 self_locked.fifo.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::SPN => {
+                self_locked.spn.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                         self_locked.spn.metrics.TotalWaitingTime / num_of_processes as u32,
+                         self_locked.spn.metrics.TotalTime / num_of_processes as u32,
+                         self_locked.spn.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::FCFS => {
+                self_locked.fcfs.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                         self_locked.fcfs.metrics.TotalWaitingTime / num_of_processes as u32,
+                         self_locked.fcfs.metrics.TotalTime / num_of_processes as u32,
+                         self_locked.fcfs.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::SJF => {
+                self_locked.sjf.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                         self_locked.sjf.metrics.TotalWaitingTime / num_of_processes as u32,
+                         self_locked.sjf.metrics.TotalTime / num_of_processes as u32,
+                         self_locked.sjf.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::HRRN => {
+                self_locked.hrrn.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                         self_locked.hrrn.metrics.TotalWaitingTime / num_of_processes as u32,
+                         self_locked.hrrn.metrics.TotalTime / num_of_processes as u32,
+                         self_locked.hrrn.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::RR => {
+                self_locked.rr.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                         self_locked.rr.metrics.TotalWaitingTime / num_of_processes as u32,
+                         self_locked.rr.metrics.TotalTime / num_of_processes as u32,
+                         self_locked.rr.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::SRF => {
+                self_locked.srf.start();
+                println!("Metrics:\nAverage Waiting Time: {:?}, Average Total Time: {:?}, Average Response Time: {:?}",
+                         self_locked.srf.metrics.TotalWaitingTime / num_of_processes as u32,
+                         self_locked.srf.metrics.TotalTime / num_of_processes as u32,
+                         self_locked.srf.metrics.ResponseTime / num_of_processes as u32,
+                )
+            },
+            Queues::MLQ => {
+                self_locked.mlq.start();
+            },
+            Queues::MLFQ =>{
+                self_locked.mlfq.start();
+            },
+        }
+
     }
 
-    fn init(lambda_rate_arrival: f64, lambda_rate_cbt: f64) -> Self {
+    pub(crate) fn init(lambda_rate_arrival: f64, lambda_rate_cbt: f64) -> Self {
         Simulator {
             lambda_rate_arrival,
             lambda_rate_cbt,
@@ -217,5 +228,5 @@ pub fn test2() {
 
 pub fn test() {
     let sim = Simulator::init(0.01, 0.001);
-    sim.run_simulate(20, 30, Queues::MLFQ);
+    sim.run_simulate(10, Queues::SPN);
 }

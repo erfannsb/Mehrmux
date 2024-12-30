@@ -22,6 +22,31 @@ use std::thread;
 //would be chosen in the dequeue method. then the chosen process will be executed by calling
 //the run method.
 
+#[derive(Debug)]
+pub struct Metrics {
+    pub ResponseTime: Duration,
+    pub TotalWaitingTime: Duration,
+    pub TotalTime: Duration,
+}
+
+impl Metrics {
+    fn new() -> Self{
+        Metrics {
+            ResponseTime: Duration::from_millis(0),
+            TotalTime: Duration::from_millis(0),
+            TotalWaitingTime: Duration::from_millis(0),
+        }
+    }
+
+    fn averages(&mut self, number_of_process: usize) -> (Duration, Duration, Duration) {
+        (
+            self.TotalWaitingTime / number_of_process as u32,
+            self.TotalTime / number_of_process as u32,
+            self.TotalWaitingTime / number_of_process as u32
+        )
+    }
+}
+
 
 // FIFO Algorithm ----------------------------------------------------------------------------------
 
@@ -30,6 +55,7 @@ pub struct FIFO {
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
+    pub metrics: Metrics
 }
 
 impl FIFO {
@@ -47,11 +73,11 @@ impl FIFO {
     }
 
     pub(crate) fn start(&mut self) {
-        if self.processes.is_empty(){
-            return;
-        }
         let time_passed = Instant::now();
         loop {
+            if self.processes.is_empty(){
+                break;
+            }
             match self.dequeue() {
                 Some(mut process) => {
                     self.current_process = Some(process);
@@ -60,12 +86,16 @@ impl FIFO {
                              self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
                             self.current_time.clone()
                     );
+                    self.metrics.ResponseTime += Instant::now().duration_since(self.current_process.as_ref().unwrap().arrival_time);
                     let result = self.current_process.as_mut().unwrap().run();
+
                     match result {
                         Ok(_) => {
-                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
                             self.current_time = time_passed.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
+                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                                self.metrics.TotalWaitingTime += self.current_process.as_ref().unwrap().waiting_time;
+                                self.metrics.TotalTime += self.current_process.as_ref().unwrap().cpu_burst_time + self.current_process.as_ref().unwrap().waiting_time;
+                                println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
                                      self.current_time,
                                      self.current_process.as_ref().unwrap().cpu_burst_time,
@@ -88,6 +118,11 @@ impl FIFO {
             current_process: None,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -96,10 +131,11 @@ impl FIFO {
 //Erfun
 
 pub struct SPN {
-    processes: Vec<Process>,
+    pub processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
+    pub metrics: Metrics
 }
 
 impl SPN {
@@ -128,6 +164,7 @@ impl SPN {
                 Some(mut process) => {
                     self.current_process = Some(process);
                     self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    self.metrics.ResponseTime += Instant::now().duration_since(self.current_process.as_ref().unwrap().arrival_time);
                     println!("🔲 Process: [{}] Stared Running",
                              self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
                     );
@@ -135,6 +172,8 @@ impl SPN {
                     match result {
                         Ok(_) => {
                             self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.metrics.TotalWaitingTime += self.current_process.as_ref().unwrap().waiting_time;
+                            self.metrics.TotalTime += self.current_process.as_ref().unwrap().cpu_burst_time + self.current_process.as_ref().unwrap().waiting_time;
                             self.current_time = time_passed.elapsed();
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
@@ -159,6 +198,11 @@ impl SPN {
             current_process: None,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -167,10 +211,11 @@ impl SPN {
 // Meownoosh
 
 pub struct FCFS {
-    processes: Vec<Process>,
+    pub processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
+    pub metrics: Metrics
 }
 
 impl FCFS {
@@ -200,6 +245,7 @@ impl FCFS {
                 Some(mut process) => {
                     self.current_process = Some(process);
                     self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
+                    self.metrics.ResponseTime += Instant::now().duration_since(self.current_process.as_ref().unwrap().arrival_time);
                     println!("🔲 Process: [{}] Stared Running at {:?}",
                              self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
                              self.current_time.clone()
@@ -208,6 +254,8 @@ impl FCFS {
                     match result {
                         Ok(_) => {
                             self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
+                            self.metrics.TotalWaitingTime += self.current_process.as_ref().unwrap().waiting_time;
+                            self.metrics.TotalTime += self.current_process.as_ref().unwrap().cpu_burst_time + self.current_process.as_ref().unwrap().waiting_time;
                             self.current_time = time_passed.elapsed();
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
@@ -270,6 +318,11 @@ impl FCFS {
             current_process: None,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_millis(10),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -278,10 +331,11 @@ impl FCFS {
 // Erfun
 
 pub struct SJF {
-    processes: Vec<Process>,
+    pub processes: Vec<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
     time_quantum: Duration,
+    pub metrics: Metrics
 }
 
 impl SJF {
@@ -305,7 +359,6 @@ impl SJF {
 
             let time_quantum = self.time_quantum;
             let mut to_remove = None; // Track which process to remove.
-
             if let Some(process) = self.dequeue() {
                 process.status = ProcessStatus::Running;
                 println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
@@ -364,7 +417,12 @@ impl SJF {
             processes: vec![],
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100)
+            time_quantum: Duration::from_millis(100),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -373,10 +431,11 @@ impl SJF {
 // Meownoosh
 
 pub struct HRRN {
-    processes: Vec<Process>,
+    pub processes: Vec<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
     time_quantum: Duration,
+    pub metrics: Metrics
 }
 
 impl HRRN {
@@ -418,6 +477,7 @@ impl HRRN {
             match self.dequeue() {
                 Some(mut process) => {
                     process.status = ProcessStatus::Running;
+                    self.metrics.ResponseTime += Instant::now().duration_since(process.arrival_time);
                     println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
                              process.id.clone().to_string()[0..7].to_string(),
                              process.cpu_burst_time.clone()
@@ -426,6 +486,8 @@ impl HRRN {
                     match result {
                         Ok(_) => {
                             process.status = ProcessStatus::Terminated;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
                             self.current_time = time_passed.elapsed();
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      process.id.clone().to_string()[0..7].to_string(),
@@ -449,7 +511,12 @@ impl HRRN {
             processes: vec![],
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100)
+            time_quantum: Duration::from_millis(100),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -459,10 +526,11 @@ impl HRRN {
 // Meownoosh
 
 pub struct RR {
-    processes: Vec<Process>,
+    pub processes: Vec<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
     time_quantum: Duration,
+    pub metrics: Metrics
 }
 
 impl RR {
@@ -490,6 +558,7 @@ impl RR {
 
             if let Some(mut process) = self.dequeue() {
                 process.status = ProcessStatus::Running;
+                self.metrics.ResponseTime += Instant::now().duration_since(process.arrival_time);
                 println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
                          process.id.clone().to_string()[0..7].to_string(),
                          process.cpu_burst_time.clone()
@@ -500,6 +569,8 @@ impl RR {
                     Ok(_) => {
                         if process.processed_time == process.cpu_burst_time {
                             process.status = ProcessStatus::Terminated;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.waiting_time;
                             self.current_time = right_now.elapsed();
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      process.id.clone().to_string()[0..7].to_string(),
@@ -547,6 +618,8 @@ impl RR {
                     Ok(_) => {
                         if process.processed_time == process.cpu_burst_time {
                             process.status = ProcessStatus::Terminated;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.waiting_time;
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      process.id.clone().to_string()[0..7].to_string(),
                                      self.current_time,
@@ -594,6 +667,8 @@ impl RR {
                     Ok(_) => {
                         if process.processed_time == process.cpu_burst_time {
                             process.status = ProcessStatus::Terminated;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
                             self.current_time = right_now.elapsed();
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      process.id.clone().to_string()[0..7].to_string(),
@@ -630,7 +705,12 @@ impl RR {
             processes: vec![] ,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100)
+            time_quantum: Duration::from_millis(100),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -639,11 +719,12 @@ impl RR {
 // Erfun
 
 pub struct SRF {
-    processes: Vec<Process>,
+    pub processes: Vec<Process>,
     current_process: Option<Process>,
     current_time: Duration,
     context_switch_duration: Duration,
     time_quantum: Duration,
+    pub metrics: Metrics
 }
 
 impl SRF {
@@ -787,7 +868,12 @@ impl SRF {
             current_process: None,
             current_time: Duration::from_secs(0),
             context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100)
+            time_quantum: Duration::from_millis(100),
+            metrics: Metrics {
+                TotalTime: Duration::from_millis(0),
+                ResponseTime: Duration::from_millis(0),
+                TotalWaitingTime: Duration::from_millis(0),
+            }
         }
     }
 }
@@ -796,9 +882,9 @@ impl SRF {
 // Meownoosh
 
 pub struct MLQ {
-    queue_1: RR,
-    queue_2: RR,
-    queue_3: FCFS,
+    pub queue_1: RR,
+    pub queue_2: RR,
+    pub queue_3: FCFS,
 }
 
 impl MLQ {
@@ -842,9 +928,9 @@ impl MLQ {
 // Erfun
 
 pub struct MLFQ {
-    queue_1: SRF,
-    queue_2: RR,
-    queue_3: SRF
+    pub queue_1: SRF,
+    pub queue_2: RR,
+    pub queue_3: SRF
 }
 
 impl MLFQ {

@@ -24,6 +24,8 @@ pub enum ProcessType {
     BatchProcess
 }
 
+// Metrics
+
 #[derive(Debug, Clone)]
 pub struct Process {
     pub id: Uuid,
@@ -91,8 +93,7 @@ impl Process {
             processed_time: Duration::from_secs(0),
             waiting_time: Duration::from_secs(0),
             last_execution: None,
-            process_type: process_variants[rng.gen_range(0..process_variants.len())]
-
+            process_type: process_variants[rng.gen_range(0..process_variants.len())],
         }
     }
 }
