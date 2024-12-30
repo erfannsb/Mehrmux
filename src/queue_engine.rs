@@ -343,9 +343,13 @@ impl SJF {
         process.status = ProcessStatus::Ready;
         self.processes.push(process);
     }
-    fn dequeue(&mut self) -> Option<&mut Process> {
-        self.processes.sort_by_key(|p| p.cpu_burst_time);
-        self.processes.first_mut() // Return a mutable reference.
+    fn dequeue(&mut self) -> Option<Process> {
+        if self.processes.is_empty() {
+            None
+        } else {
+            self.processes.sort_by_key(|p| p.cpu_burst_time);
+            Some(self.processes.remove(0)) // Return a mutable reference.
+        }
     }
 
     pub(crate) fn start(&mut self) {
@@ -359,8 +363,9 @@ impl SJF {
 
             let time_quantum = self.time_quantum;
             let mut to_remove = None; // Track which process to remove.
-            if let Some(process) = self.dequeue() {
+            if let Some(mut process) = self.dequeue() {
                 process.status = ProcessStatus::Running;
+                let response_time = Instant::now().duration_since(process.arrival_time);
                 println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
                          process.id.clone().to_string()[0..7].to_string(),
                         process.cpu_burst_time.clone()
@@ -369,31 +374,33 @@ impl SJF {
                 self.current_time = time_passed.elapsed();
                 let copy = self.current_time;  // Access current_time before mutably borrowing self
 
-                if let Some(mut process) = self.dequeue() {
-                    match result {
-                        Ok(_) => {
-                            if process.processed_time == process.cpu_burst_time {
-                                process.status = ProcessStatus::Terminated;
-                                to_remove = Some(process.id);
-                                let ps = process.clone();
-                                println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                         ps.id.to_string()[0..7].to_string(),
-                                         copy,
-                                         ps.cpu_burst_time,
-                                         ps.waiting_time
-                                );
-                            } else {
-                                process.status = ProcessStatus::Waiting;
-                                let ps = process.clone();
-                                self.current_time = time_passed.elapsed();
+                match result {
+                    Ok(_) => {
+                        if process.processed_time == process.cpu_burst_time {
+                            process.status = ProcessStatus::Terminated;
+                            self.metrics.ResponseTime += response_time;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
+                            to_remove = Some(process.id);
+                            let ps = process.clone();
+                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
+                                     ps.id.to_string()[0..7].to_string(),
+                                     copy,
+                                     ps.cpu_burst_time,
+                                     ps.waiting_time
+                            );
+                        } else {
+                            process.status = ProcessStatus::Waiting;
+                            let ps = process.clone();
+                            self.processes.push(process);
+                            self.current_time = time_passed.elapsed();
 
-                                println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
-                                    ps.processed_time.clone(), ps.cpu_burst_time.clone());
-                            }
+                            println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
+                                ps.processed_time.clone(), ps.cpu_burst_time.clone());
                         }
-                        Err(_) => {
-                            eprintln!("Error running process {:?}", process.id);
-                        }
+                    }
+                    Err(_) => {
+                        eprintln!("Error running process {:?}", process.id);
                     }
                 }
             } else {
@@ -558,7 +565,7 @@ impl RR {
 
             if let Some(mut process) = self.dequeue() {
                 process.status = ProcessStatus::Running;
-                self.metrics.ResponseTime += Instant::now().duration_since(process.arrival_time);
+                let response_time = Instant::now().duration_since(process.arrival_time);
                 println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
                          process.id.clone().to_string()[0..7].to_string(),
                          process.cpu_burst_time.clone()
@@ -569,6 +576,7 @@ impl RR {
                     Ok(_) => {
                         if process.processed_time == process.cpu_burst_time {
                             process.status = ProcessStatus::Terminated;
+                            self.metrics.ResponseTime += response_time;
                             self.metrics.TotalWaitingTime += process.waiting_time;
                             self.metrics.TotalTime += process.waiting_time;
                             self.current_time = right_now.elapsed();
@@ -733,13 +741,18 @@ impl SRF {
         self.processes.push(process)
     }
 
-    fn dequeue(&mut self) -> Option<&mut Process> {
-        self.processes.sort_by(|p1, p2| {
-            let p1_remaining_time = p1.cpu_burst_time - p1.processed_time;
-            let p2_remaining_time = p2.cpu_burst_time - p2.processed_time;
-            p1_remaining_time.partial_cmp(&p2_remaining_time).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        self.processes.first_mut() // Return a mutable reference.
+    fn dequeue(&mut self) -> Option<Process> {
+        if self.processes.is_empty() {
+            None
+        } else {
+            self.processes.sort_by(|p1, p2| {
+                let p1_remaining_time = p1.cpu_burst_time - p1.processed_time;
+                let p2_remaining_time = p2.cpu_burst_time - p2.processed_time;
+                p1_remaining_time.partial_cmp(&p2_remaining_time).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            Some(self.processes.remove(0))
+        }
+
     }
 
     fn dequeue_remove(&mut self) -> Option<Process> {
@@ -768,6 +781,7 @@ impl SRF {
             // Dequeue the process (mutable borrow of self).
             if let Some(mut process) = self.dequeue() {
                 process.status = ProcessStatus::Running;
+                let response_time = Instant::now().duration_since(process.arrival_time);
                 println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
                          process.id.clone().to_string()[0..7].to_string(),
                          process.cpu_burst_time.clone()
@@ -783,6 +797,10 @@ impl SRF {
                     Ok(_) => {
                         if process.processed_time == process.cpu_burst_time {
                             process.status = ProcessStatus::Terminated;
+                            process.status = ProcessStatus::Terminated;
+                            self.metrics.ResponseTime += response_time;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
                             to_remove = Some(process.id);
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      ps.id.to_string()[0..7].to_string(),
@@ -793,6 +811,7 @@ impl SRF {
                         } else {
                             process.status = ProcessStatus::Waiting;
                             let ps = process.clone();
+                            self.processes.push(process);
                             println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
                                      ps.processed_time.clone(), ps.cpu_burst_time.clone());
                         }
@@ -828,6 +847,7 @@ impl SRF {
 
             if let Some(mut process) = self.dequeue_remove() {
                 process.status = ProcessStatus::Running;
+                let response_time = Instant::now().duration_since(process.arrival_time);
                 println!("🔲 Process: [{}] Stared Running",
                          process.id.clone().to_string()[0..7].to_string(),
                 );
@@ -837,6 +857,9 @@ impl SRF {
                     Ok(_) => {
                         if process.processed_time == process.cpu_burst_time {
                             process.status = ProcessStatus::Terminated;
+                            self.metrics.ResponseTime += response_time;
+                            self.metrics.TotalWaitingTime += process.waiting_time;
+                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
                             println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
                                      process.id.clone().to_string()[0..7].to_string(),
                                      self.current_time,

@@ -112,6 +112,10 @@ pub fn run() {
                     _ => Queues::FIFO
                 };
                 let sim = Simulator::init(0.01, 0.001);
+                if n_p <= 0 {
+                    println!("Wrong Number Of Processes Try Again");
+                    continue
+                }
                 sim.run_simulate(n_p, selected_queue);
             }
             3 => {return}
