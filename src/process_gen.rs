@@ -43,7 +43,7 @@ impl Process {
 
         if self.last_execution.is_none() {
             self.last_execution = Some(current_time);
-            self.waiting_time += self.arrival_time.duration_since(self.last_execution.unwrap());
+            self.waiting_time += self.last_execution.unwrap().duration_since(self.arrival_time);
         }
 
         if let Some(last_exec) = self.last_execution {
@@ -74,11 +74,15 @@ impl Process {
 
     pub fn run(&mut self) -> Result<(), ProcessErrors> {
         //simulating process work ...
+        self.calculate_waiting_time();
         sleep(self.cpu_burst_time);
+
         Ok(())  // Returns Ok(()) if there is no error
     }
 
-    pub fn new(cbt: Duration, process_type: ProcessType) -> Self {
+    pub fn new(cbt: Duration) -> Self {
+        let mut rng = thread_rng();
+        let process_variants = [ProcessType::BatchProcess, ProcessType::SystemProcess, ProcessType::SystemProcess];
         Process {
             id: Uuid::new_v4(),
             cpu_burst_time: cbt,
@@ -87,16 +91,15 @@ impl Process {
             processed_time: Duration::from_secs(0),
             waiting_time: Duration::from_secs(0),
             last_execution: None,
-            process_type,
+            process_type: process_variants[rng.gen_range(0..process_variants.len())]
+
         }
     }
 }
 
 pub fn build_test_process() -> Process {
     let mut rng = thread_rng();
-    let process_variants = [ProcessType::BatchProcess, ProcessType::SystemProcess, ProcessType::SystemProcess];
     Process::new(
         Duration::from_millis(rng.gen_range(0..500)),
-        process_variants[rng.gen_range(0..process_variants.len())]
     )
 }

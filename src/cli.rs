@@ -14,6 +14,7 @@ pub enum Queues {
     MLFQ,
 }
 
+
 impl fmt::Display for Queues {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

@@ -8,6 +8,6 @@ mod cli;
 fn main() {
     // queue_engine::test();
     // queue_engine::test_two();
-    // simulator::test();
-    cli::test();
+    simulator::test();
+    // cli::test();
 }
