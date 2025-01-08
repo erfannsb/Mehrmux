@@ -1,9 +1,11 @@
-use std::thread::{sleep};
-use std::time::{Duration, Instant};
-use crate::process_gen::{build_test_process, Process, ProcessStatus, ProcessType};
-use std::sync::{Arc, Mutex};
+use crate::process_gen::{build_test_process, Metrics, Process, ProcessStatus, ProcessType};
+use std::collections::HashMap;
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
+use std::sync::Arc;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+use std::{process, thread};
 // Important Description ---------------------------------------------------------------------------
 //All queue structs should have these properties:
 
@@ -12,8 +14,7 @@ use std::thread;
 //current_time: to measure the time passed while running the queue algorithm
 //context_switch_duration: arbitrary duration for hypothetical context switching process
 
-
-//every queue should inherit from Queue trait and define its own enqueue and dequeue method
+//every queue should inherit from ReadyQueue trait and define its own enqueue and dequeue method
 
 //every queue should implement start method in which there will be an infinite loop which never
 //stops (by adding stop_flag in start method parameter we can then pass an atomic boolean to stop
@@ -21,532 +22,91 @@ use std::thread;
 //if processes vector isn't empty then the process with the right priority based on the algorithm
 //would be chosen in the dequeue method. then the chosen process will be executed by calling
 //the run method.
-
-#[derive(Debug)]
-pub struct Metrics {
-    pub ResponseTime: Duration,
-    pub TotalWaitingTime: Duration,
-    pub TotalTime: Duration,
+enum QueueDiscipline {
+    FIFO,
+    SPN,
+    FCFS,
+    SJF,
+    HRRN,
+    RR,
+    SRF,
 }
 
-impl Metrics {
-    fn new() -> Self{
-        Metrics {
-            ResponseTime: Duration::from_millis(0),
-            TotalTime: Duration::from_millis(0),
-            TotalWaitingTime: Duration::from_millis(0),
-        }
-    }
-
-    fn averages(&mut self, number_of_process: usize) -> (Duration, Duration, Duration) {
-        (
-            self.TotalWaitingTime / number_of_process as u32,
-            self.TotalTime / number_of_process as u32,
-            self.TotalWaitingTime / number_of_process as u32
-        )
-    }
-}
-
-
-// FIFO Algorithm ----------------------------------------------------------------------------------
-
-pub struct FIFO {
+struct ReadyQueue {
     processes: Vec<Process>,
-    current_process: Option<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
-    pub metrics: Metrics
-}
-
-impl FIFO {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process)
-    }
-
-    fn dequeue(&mut self) -> Option<Process> {
-        if self.processes.is_empty() {
-            None
-        } else {
-            Some(self.processes.remove(0))
-        }
-    }
-
-    pub(crate) fn start(&mut self) {
-        let time_passed = Instant::now();
-        loop {
-            if self.processes.is_empty(){
-                break;
-            }
-            match self.dequeue() {
-                Some(mut process) => {
-                    self.current_process = Some(process);
-                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
-                    println!("🔲 Process: [{}] Stared Running at {:?}",
-                             self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                            self.current_time.clone()
-                    );
-                    self.metrics.ResponseTime += Instant::now().duration_since(self.current_process.as_ref().unwrap().arrival_time);
-                    let result = self.current_process.as_mut().unwrap().run();
-
-                    match result {
-                        Ok(_) => {
-                            self.current_time = time_passed.elapsed();
-                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
-                                self.metrics.TotalWaitingTime += self.current_process.as_ref().unwrap().waiting_time;
-                                self.metrics.TotalTime += self.current_process.as_ref().unwrap().cpu_burst_time + self.current_process.as_ref().unwrap().waiting_time;
-                                println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     self.current_process.as_ref().unwrap().cpu_burst_time,
-                                     self.current_process.as_ref().unwrap().waiting_time
-                            );
-                        },
-                        Err(_) => {}
-                    }
-                }
-                None => {}
-            }
-
-            sleep(self.context_switch_duration); // context switch process ...
-        }
-    }
-
-    pub fn init() -> Self {
-        Self {
-            processes: vec![] ,
-            current_process: None,
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_micros(5),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
-            }
-        }
-    }
-}
-
-// SPN Algorithm -----------------------------------------------------------------------------------
-//Erfun
-
-pub struct SPN {
-    pub processes: Vec<Process>,
-    current_process: Option<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
-    pub metrics: Metrics
-}
-
-impl SPN {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process);
-    }
-    fn dequeue(&mut self) -> Option<Process> {
-        self.processes.sort_by_key(|p| p.cpu_burst_time);
-        if self.processes.is_empty() {
-            None
-        } else {
-            Some(self.processes.remove(0))
-        }
-    }
-    pub(crate) fn start(&mut self) {
-        self.current_time = Duration::from_millis(0);
-        let time_passed = Instant::now();
-        loop {
-
-            if self.processes.is_empty() {
-                break;
-            }
-
-            match self.dequeue() {
-                Some(mut process) => {
-                    self.current_process = Some(process);
-                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
-                    self.metrics.ResponseTime += Instant::now().duration_since(self.current_process.as_ref().unwrap().arrival_time);
-                    println!("🔲 Process: [{}] Stared Running",
-                             self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                    );
-                    let result = self.current_process.as_mut().unwrap().run();
-                    match result {
-                        Ok(_) => {
-                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
-                            self.metrics.TotalWaitingTime += self.current_process.as_ref().unwrap().waiting_time;
-                            self.metrics.TotalTime += self.current_process.as_ref().unwrap().cpu_burst_time + self.current_process.as_ref().unwrap().waiting_time;
-                            self.current_time = time_passed.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     self.current_process.as_ref().unwrap().cpu_burst_time,
-                                     self.current_process.as_ref().unwrap().waiting_time
-                            );
-                        },
-                        Err(_) => {}
-                    }
-                }
-                None => {}
-            }
-
-            sleep(self.context_switch_duration); // context switch process ...
-        }
-    }
-
-    pub fn init() -> Self {
-        SPN {
-            processes: vec![],
-            current_process: None,
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_micros(5),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
-            }
-        }
-    }
-}
-
-// FCFS Algorithm ----------------------------------------------------------------------------------
-// Meownoosh
-
-pub struct FCFS {
-    pub processes: Vec<Process>,
-    current_process: Option<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
-    pub metrics: Metrics
-}
-
-impl FCFS {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process)
-    }
-
-    fn dequeue(&mut self) -> Option<Process> {
-        if self.processes.is_empty() {
-            None
-        } else {
-            Some(self.processes.remove(0))
-        }
-    }
-
-    pub(crate) fn start(&mut self) {
-        self.current_time = Duration::from_millis(0);
-        let time_passed = Instant::now();
-        loop {  // in this loop we process all processes until there is no process left
-
-            if self.processes.is_empty() {
-                break;
-            }
-
-            match self.dequeue() {
-                Some(mut process) => {
-                    self.current_process = Some(process);
-                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
-                    self.metrics.ResponseTime += Instant::now().duration_since(self.current_process.as_ref().unwrap().arrival_time);
-                    println!("🔲 Process: [{}] Stared Running at {:?}",
-                             self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                             self.current_time.clone()
-                    );
-                    let result = self.current_process.as_mut().unwrap().run();
-                    match result {
-                        Ok(_) => {
-                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
-                            self.metrics.TotalWaitingTime += self.current_process.as_ref().unwrap().waiting_time;
-                            self.metrics.TotalTime += self.current_process.as_ref().unwrap().cpu_burst_time + self.current_process.as_ref().unwrap().waiting_time;
-                            self.current_time = time_passed.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     self.current_process.as_ref().unwrap().cpu_burst_time,
-                                     self.current_process.as_ref().unwrap().waiting_time
-                            );
-                        },
-                        Err(_) => {}
-                    }
-                }
-                None => {}
-            }
-
-            sleep(self.context_switch_duration); // context switch process ...
-        }
-    }
-
-    fn start_and_end(&mut self) {
-        self.current_time = Duration::from_millis(0);
-        let time_passed = Instant::now();
-        loop {
-
-            if self.processes.is_empty() {
-                break;
-            }
-
-            match self.dequeue() {
-                Some(mut process) => {
-                    self.current_process = Some(process);
-                    self.current_process.as_mut().unwrap().status = ProcessStatus::Running;
-                    println!("🔲 Process: [{}] Stared Running",
-                             self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                    );
-                    let result = self.current_process.as_mut().unwrap().run();
-                    match result {
-                        Ok(_) => {
-                            self.current_process.as_mut().unwrap().status = ProcessStatus::Terminated;
-                            self.current_time = time_passed.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     self.current_process.as_ref().unwrap().id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     self.current_process.as_ref().unwrap().cpu_burst_time,
-                                     self.current_process.as_ref().unwrap().waiting_time
-                            );
-                        },
-                        Err(_) => {}
-                    }
-                }
-                None => {}
-            }
-
-            sleep(self.context_switch_duration); // context switch process ...
-        }
-    }
-
-    pub fn init() -> Self {
-        Self {
-            processes: vec![] ,
-            current_process: None,
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_millis(10),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
-            }
-        }
-    }
-}
-
-// SJF Algorithm -----------------------------------------------------------------------------------
-// Erfun
-
-pub struct SJF {
-    pub processes: Vec<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
+    discipline: QueueDiscipline,
     time_quantum: Duration,
-    pub metrics: Metrics
+    context_switch: Duration,
+    finished_processes: Vec<Process>,
 }
 
-impl SJF {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process);
-    }
-    fn dequeue(&mut self) -> Option<Process> {
-        if self.processes.is_empty() {
-            None
-        } else {
-            self.processes.sort_by_key(|p| p.cpu_burst_time);
-            Some(self.processes.remove(0)) // Return a mutable reference.
-        }
-    }
-
-    pub(crate) fn start(&mut self) {
-        let time_passed = Instant::now();
-        self.current_time = Duration::from_millis(0);
-
-        loop {
-            if self.processes.is_empty() {
-                break;
-            }
-
-            let time_quantum = self.time_quantum;
-            let mut to_remove = None; // Track which process to remove.
-            if let Some(mut process) = self.dequeue() {
-                process.status = ProcessStatus::Running;
-                let response_time = Instant::now().duration_since(process.arrival_time);
-                println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
-                         process.id.clone().to_string()[0..7].to_string(),
-                        process.cpu_burst_time.clone()
-                );
-                let result = process.run_with_interrupt(time_quantum);
-                self.current_time = time_passed.elapsed();
-                let copy = self.current_time;  // Access current_time before mutably borrowing self
-
-                match result {
-                    Ok(_) => {
-                        if process.processed_time == process.cpu_burst_time {
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.ResponseTime += response_time;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
-                            to_remove = Some(process.id);
-                            let ps = process.clone();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     ps.id.to_string()[0..7].to_string(),
-                                     copy,
-                                     ps.cpu_burst_time,
-                                     ps.waiting_time
-                            );
-                        } else {
-                            process.status = ProcessStatus::Waiting;
-                            let ps = process.clone();
-                            self.processes.push(process);
-                            self.current_time = time_passed.elapsed();
-
-                            println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
-                                ps.processed_time.clone(), ps.cpu_burst_time.clone());
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("Error running process {:?}", process.id);
-                    }
-                }
-            } else {
-                println!("No processes left to process.");
-                break;
-            }
-
-            // Remove the process after the mutable borrow ends.
-            if let Some(id) = to_remove {
-                if let Some(pos) = self.processes.iter().position(|p| p.id == id) {
-                    self.processes.remove(pos);
-                }
-            }
-
-            sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
-        }
-    }
-
-    pub(crate) fn init() -> Self {
-        SJF {
-            processes: vec![],
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_micros(5),
+impl ReadyQueue {
+    pub fn new(discipline: QueueDiscipline) -> Self {
+        ReadyQueue {
+            processes: Vec::new(),
+            discipline,
             time_quantum: Duration::from_millis(100),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
+            context_switch: Duration::from_millis(10),
+            finished_processes: Vec::new(),
+        }
+    }
+
+    pub fn sort(&mut self) {
+        match self.discipline {
+            QueueDiscipline::FIFO => {}
+            QueueDiscipline::SPN => {
+                self.processes.sort_by_key(|p| p.cpu_burst_time);
+            }
+            QueueDiscipline::FCFS => {}
+            QueueDiscipline::SJF => {
+                self.processes.sort_by_key(|p| p.cpu_burst_time);
+            }
+            QueueDiscipline::HRRN => {
+                self.processes.sort_by(|p1, p2| {
+                    let p1_ratio = (p1.waiting_time.as_millis() as f64
+                        + p1.cpu_burst_time.as_millis() as f64)
+                        / p1.cpu_burst_time.as_millis() as f64;
+                    let p2_ratio = (p2.waiting_time.as_millis() as f64
+                        + p2.cpu_burst_time.as_millis() as f64)
+                        / p2.cpu_burst_time.as_millis() as f64;
+                    p2_ratio
+                        .partial_cmp(&p1_ratio)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+            QueueDiscipline::RR => {}
+            QueueDiscipline::SRF => {
+                self.processes.sort_by(|p1, p2| {
+                    let p1_remaining_time = p1.cpu_burst_time - p1.processed_time;
+                    let p2_remaining_time = p2.cpu_burst_time - p2.processed_time;
+                    p1_remaining_time
+                        .partial_cmp(&p2_remaining_time)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             }
         }
     }
-}
 
-// HRRN Algorithm ----------------------------------------------------------------------------------
-// Meownoosh
+    pub fn is_preemptive(&self) -> bool {
+        match self.discipline {
+            QueueDiscipline::FIFO => false,
+            QueueDiscipline::SPN => false,
+            QueueDiscipline::FCFS => false,
+            QueueDiscipline::SJF => true,
+            QueueDiscipline::HRRN => false,
+            QueueDiscipline::RR => true,
+            QueueDiscipline::SRF => true,
+        }
+    }
 
-pub struct HRRN {
-    pub processes: Vec<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
-    time_quantum: Duration,
-    pub metrics: Metrics
-}
-
-impl HRRN {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
+    pub fn enqueue(&mut self, mut process: Process) {
         process.status = ProcessStatus::Ready;
+        process.arrival_time = Instant::now();
         self.processes.push(process);
     }
 
-    fn dequeue(&mut self) -> Option<Process> {
-        // Sorting Processes based on the highest response ratio first.
-        if self.processes.is_empty() {
-            None
-        } else {
-            let current_time = Instant::now();
-
-            for p in self.processes.iter_mut() {
-                p.waiting_time = current_time.duration_since(p.arrival_time);
-            }
-
-            self.processes.sort_by(|p1, p2| {
-                let p1_ratio = (p1.waiting_time.as_millis() as f64 + p1.cpu_burst_time.as_millis() as f64) / p1.cpu_burst_time.as_millis() as f64;
-                let p2_ratio = (p2.waiting_time.as_millis() as f64 + p2.cpu_burst_time.as_millis() as f64) / p2.cpu_burst_time.as_millis() as f64;
-                p2_ratio.partial_cmp(&p1_ratio).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            // Return a mutable reference to the first process
-            Some(self.processes.remove(0))
-        }
-    }
-
-    pub(crate) fn start(&mut self) {
-        self.current_time = Duration::from_millis(0);
-        let time_passed = Instant::now();
-        loop {  // in this loop we process all processes until there is no process left
-
-            if self.processes.is_empty() {
-                break;
-            }
-
-            match self.dequeue() {
-                Some(mut process) => {
-                    process.status = ProcessStatus::Running;
-                    self.metrics.ResponseTime += Instant::now().duration_since(process.arrival_time);
-                    println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
-                             process.id.clone().to_string()[0..7].to_string(),
-                             process.cpu_burst_time.clone()
-                    );
-                    let result = process.run();
-                    match result {
-                        Ok(_) => {
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
-                            self.current_time = time_passed.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     process.id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     process.cpu_burst_time,
-                                     process.waiting_time
-                            );
-                        },
-                        Err(_) => {}
-                    }
-                }
-                None => {}
-            }
-
-            sleep(self.context_switch_duration); // context switch process ...
-        }
-    }
-
-    pub(crate) fn init() -> Self {
-        HRRN {
-            processes: vec![],
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
-            }
-        }
-    }
-}
-
-
-// RR Algorithm ------------------------------------------------------------------------------------
-// Meownoosh
-
-pub struct RR {
-    pub processes: Vec<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
-    time_quantum: Duration,
-    pub metrics: Metrics
-}
-
-impl RR {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process)
-    }
-
-    fn dequeue(&mut self) -> Option<Process> {
+    pub fn dequeue(&mut self) -> Option<Process> {
+        self.sort();
         if self.processes.is_empty() {
             None
         } else {
@@ -554,350 +114,81 @@ impl RR {
         }
     }
 
-    pub(crate) fn start(&mut self) {
-        let right_now = Instant::now();
-        self.current_time = Duration::from_millis(0);
+    pub fn execute_next(&mut self) -> Option<Process>{
+        if let Some(mut process) = self.dequeue() {
+            let right_now = Instant::now();
+            process.status = ProcessStatus::Running;
+            println!("--------------------------------------");
+            println!("process {:?} is running", process);
 
-        loop {
-            if self.processes.is_empty() {
-                break;
+            let result;
+            if self.is_preemptive() {
+                result = process.run_with_interrupt(&self.time_quantum, &right_now);
+                println!("process is preemptive");
+            } else {
+                result = process.run(&right_now);
             }
 
-            if let Some(mut process) = self.dequeue() {
-                process.status = ProcessStatus::Running;
-                let response_time = Instant::now().duration_since(process.arrival_time);
-                println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
-                         process.id.clone().to_string()[0..7].to_string(),
-                         process.cpu_burst_time.clone()
-                );
-                let result = process.run_with_interrupt(self.time_quantum);
-
-                match result {
-                    Ok(_) => {
-                        if process.processed_time == process.cpu_burst_time {
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.ResponseTime += response_time;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.waiting_time;
-                            self.current_time = right_now.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     process.id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     process.cpu_burst_time,
-                                     process.waiting_time
-                            );
-                        } else {
-                            process.status = ProcessStatus::Waiting;
-                            let ps = process.clone();
-                            self.processes.push(process); // push process to the end of the processes vector
-                            println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
-                                     ps.processed_time.clone(), ps.cpu_burst_time.clone());
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("Error running process {:?}", process.id);
+            match result {
+                Ok(()) => {
+                    return if process.processed_time == process.cpu_burst_time {
+                        process.status = ProcessStatus::Terminated;
+                        println!("process {:?} is finished running", process);
+                        self.finished_processes.push(process.clone());
+                        Some(process)
+                    } else {
+                        println!("process {:?} is waiting", process);
+                        process.status = ProcessStatus::Waiting;
+                        self.processes.push(process.clone());
+                        Some(process)
                     }
                 }
-            } else {
-                println!("No processes left to process.");
-                break;
-            }
-
-            sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
-        }
-    }
-
-    fn start_and_end(&mut self) {
-        self.current_time = Duration::from_millis(0);
-
-        loop {
-            if self.processes.is_empty() {
-                break;
-            }
-
-            if let Some(mut process) = self.dequeue() {
-                process.status = ProcessStatus::Running;
-                println!("🔲 Process: [{}] Stared Running",
-                         process.id.clone().to_string()[0..7].to_string(),
-                );
-                let result = process.run_with_interrupt(self.time_quantum);
-
-                match result {
-                    Ok(_) => {
-                        if process.processed_time == process.cpu_burst_time {
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.waiting_time;
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     process.id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     process.cpu_burst_time,
-                                     process.waiting_time
-                            );
-                            } else {
-                            process.status = ProcessStatus::Waiting;
-                            let ps = process.clone();
-                            self.processes.push(process); // push process to the end of the processes vector
-                            println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
-                                     ps.processed_time.clone(), ps.cpu_burst_time.clone());
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("Error running process {:?}", process.id);
-                    }
+                Err(e) => {
+                    eprintln!("process {}, terminated with error: {:?}", process.id, e);
                 }
-            } else {
-                println!("No processes left to process.");
-                break;
             }
-
-            sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
-        }
-    }
-
-    fn start_and_return(&mut self) -> Option<Process>{
-        let right_now = Instant::now();
-        self.current_time = Duration::from_millis(0);
-
-        loop {
-            if self.processes.is_empty() {
-                return None;
-            }
-
-            if let Some(mut process) = self.dequeue() {
-                process.status = ProcessStatus::Running;
-                println!("🔲 Process: [{}] Stared Running",
-                         process.id.clone().to_string()[0..7].to_string(),
-                );
-                let result = process.run_with_interrupt(self.time_quantum);
-
-                match result {
-                    Ok(_) => {
-                        if process.processed_time == process.cpu_burst_time {
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
-                            self.current_time = right_now.elapsed();
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     process.id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     process.cpu_burst_time,
-                                     process.waiting_time
-                            );
-                        } else {
-                            process.status = ProcessStatus::Waiting;
-                            self.current_time = right_now.elapsed();
-                            let ps = process.clone();
-                            println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
-                                     ps.processed_time.clone(), ps.cpu_burst_time.clone());
-                            return Some(process);
-
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("Error running process {:?}", process.id);
-                    }
-                }
-            } else {
-                println!("No processes left to process.");
-                return None;
-            }
-
-            sleep(self.context_switch_duration); // Hypothetical Context Switching Process ...
-        }
-
-    }
-
-    pub(crate) fn init() -> Self {
-        RR {
-            processes: vec![] ,
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
-            }
-        }
-    }
-}
-
-// SRF Algorithm -----------------------------------------------------------------------------------
-// Erfun
-
-pub struct SRF {
-    pub processes: Vec<Process>,
-    current_process: Option<Process>,
-    current_time: Duration,
-    context_switch_duration: Duration,
-    time_quantum: Duration,
-    pub metrics: Metrics
-}
-
-impl SRF {
-    pub(crate) fn enqueue(&mut self, mut process: Process) {
-        process.status = ProcessStatus::Ready;
-        self.processes.push(process)
-    }
-
-    fn dequeue(&mut self) -> Option<Process> {
-        if self.processes.is_empty() {
-            None
         } else {
-            self.processes.sort_by(|p1, p2| {
-                let p1_remaining_time = p1.cpu_burst_time - p1.processed_time;
-                let p2_remaining_time = p2.cpu_burst_time - p2.processed_time;
-                p1_remaining_time.partial_cmp(&p2_remaining_time).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            Some(self.processes.remove(0))
+            eprintln!("No Process Found!");
         }
 
+        sleep(self.context_switch); // simulating context_switch
+        None
     }
 
-    fn dequeue_remove(&mut self) -> Option<Process> {
-        self.processes.sort_by(|p1, p2| {
-            let p1_remaining_time = p1.cpu_burst_time - p1.processed_time;
-            let p2_remaining_time = p2.cpu_burst_time - p2.processed_time;
-            p1_remaining_time.partial_cmp(&p2_remaining_time).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        Some(self.processes.remove(0))
-    }
-    pub(crate) fn start(&mut self) {
-        let right_now = Instant::now();
-        self.current_time = Duration::from_millis(0);
+    pub fn calculate_metrics(&self) -> HashMap<String, Duration> {
+        let process_metrics: Vec<Metrics> = self
+            .finished_processes
+            .iter()
+            .map(|process| process.metrics)
+            .collect();
+        let length_of_processes: u32 = process_metrics.len() as u32;
+        let mut average_metrics: HashMap<String, Duration> = HashMap::new();
 
-        loop {
-            if self.processes.is_empty() {
-                break;
-            }
-
-            let time_quantum = self.time_quantum;
-            self.current_time = right_now.elapsed();
-
-            let copy = self.current_time;  // Access current_time after mutable borrow ends
-            let mut to_remove = None; // Track which process to remove.
-
-            // Dequeue the process (mutable borrow of self).
-            if let Some(mut process) = self.dequeue() {
-                process.status = ProcessStatus::Running;
-                let response_time = Instant::now().duration_since(process.arrival_time);
-                println!("🔲 Process: [{}] Stared Running, CBT: {:?}",
-                         process.id.clone().to_string()[0..7].to_string(),
-                         process.cpu_burst_time.clone()
-                );
-                // Run process and handle the result
-                let result = process.run_with_interrupt(time_quantum);
-
-                // Access self.current_time here, after process is dequeued and result is processed.
-
-                let ps = process.clone();  // Clone the process for printing later
-
-                match result {
-                    Ok(_) => {
-                        if process.processed_time == process.cpu_burst_time {
-                            process.status = ProcessStatus::Terminated;
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.ResponseTime += response_time;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
-                            to_remove = Some(process.id);
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     ps.id.to_string()[0..7].to_string(),
-                                     copy,
-                                     ps.cpu_burst_time,
-                                     ps.waiting_time
-                            );
-                        } else {
-                            process.status = ProcessStatus::Waiting;
-                            let ps = process.clone();
-                            self.processes.push(process);
-                            println!("🟦 Process [{}] Stopped Because It Reached Time Quantum, Processed Time: {:?}, CBT: {:?}", ps.id.to_string()[0..7].to_string(),
-                                     ps.processed_time.clone(), ps.cpu_burst_time.clone());
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("Error running process {:?}", process.id);
-                    }
-                }
-
-                // Remove the process after the mutable borrow ends
-                if let Some(id) = to_remove {
-                    if let Some(pos) = self.processes.iter().position(|p| p.id == id) {
-                        self.processes.remove(pos);
-                    }
-                }
-
-                // Hypothetical Context Switching Process ...
-                sleep(self.context_switch_duration);
-            } else {
-                println!("No processes left to process.");
-                break;
-            }
-        }
-    }
-
-    fn start_and_return(&mut self) -> Option<Process> {
-        self.current_time = Duration::from_millis(0);
-
-        loop {
-            if self.processes.is_empty() {
-                return None;
-            }
-
-            if let Some(mut process) = self.dequeue_remove() {
-                process.status = ProcessStatus::Running;
-                let response_time = Instant::now().duration_since(process.arrival_time);
-                println!("🔲 Process: [{}] Stared Running",
-                         process.id.clone().to_string()[0..7].to_string(),
-                );
-                let result = process.run_with_interrupt(self.time_quantum);
-
-                match result {
-                    Ok(_) => {
-                        if process.processed_time == process.cpu_burst_time {
-                            process.status = ProcessStatus::Terminated;
-                            self.metrics.ResponseTime += response_time;
-                            self.metrics.TotalWaitingTime += process.waiting_time;
-                            self.metrics.TotalTime += process.cpu_burst_time + process.waiting_time;
-                            println!("🔸 Process: [{}] Terminated At: {:?}, CBT: {:?}, Waiting Time: {:?}",
-                                     process.id.clone().to_string()[0..7].to_string(),
-                                     self.current_time,
-                                     process.cpu_burst_time,
-                                     process.waiting_time
-                            );
-                        } else {
-                            process.status = ProcessStatus::Waiting;
-                            return Some(process); // Return the process without borrowing.
-                        }
-                    }
-                    Err(_) => {
-                        eprintln!("Error running process {:?}", process.id);
-                    }
-                }
-            } else {
-                println!("No processes left to process.");
-                return None;
-            }
-
-            sleep(self.context_switch_duration); // Hypothetical Context Switching Process...
-        }
-    }
-
-
-    pub(crate) fn init() -> Self {
-        Self {
-            processes: vec![] ,
-            current_process: None,
-            current_time: Duration::from_secs(0),
-            context_switch_duration: Duration::from_micros(5),
-            time_quantum: Duration::from_millis(100),
-            metrics: Metrics {
-                TotalTime: Duration::from_millis(0),
-                ResponseTime: Duration::from_millis(0),
-                TotalWaitingTime: Duration::from_millis(0),
-            }
-        }
+        average_metrics.insert(
+            String::from("average_turnaround_time"),
+            process_metrics
+                .iter()
+                .map(|m| m.total_time)
+                .sum::<Duration>()
+                / length_of_processes,
+        );
+        average_metrics.insert(
+            String::from("average_waiting_time"),
+            process_metrics
+                .iter()
+                .map(|m| m.total_waiting_time)
+                .sum::<Duration>()
+                / length_of_processes,
+        );
+        average_metrics.insert(
+            String::from("average_response_time"),
+            process_metrics
+                .iter()
+                .map(|m| m.response_time)
+                .sum::<Duration>()
+                / length_of_processes,
+        );
+        average_metrics
     }
 }
 
@@ -905,44 +196,38 @@ impl SRF {
 // Meownoosh
 
 pub struct MLQ {
-    pub queue_1: RR,
-    pub queue_2: RR,
-    pub queue_3: FCFS,
+    pub queue_1: ReadyQueue,
+    pub queue_2: ReadyQueue,
+    pub queue_3: ReadyQueue,
 }
 
 impl MLQ {
-    pub(crate) fn init() -> Self {
+    pub(crate) fn init(
+        q1_d: QueueDiscipline,
+        q2_d: QueueDiscipline,
+        q3_d: QueueDiscipline,
+    ) -> Self {
         MLQ {
-            queue_1: RR::init(),
-            queue_2: RR::init(),
-            queue_3: FCFS::init()
+            queue_1: ReadyQueue::new(q1_d),
+            queue_2: ReadyQueue::new(q2_d),
+            queue_3: ReadyQueue::new(q3_d),
         }
     }
     pub(crate) fn enqueue(&mut self, process: Process) {
         match process.process_type {
             ProcessType::SystemProcess => self.queue_1.enqueue(process),
             ProcessType::InteractiveProcess => self.queue_2.enqueue(process),
-            ProcessType::BatchProcess => self.queue_3.enqueue(process)
+            ProcessType::BatchProcess => self.queue_3.enqueue(process),
         }
     }
 
-    pub(crate) fn start(&mut self) {
-        loop {
-            if self.queue_1.processes.is_empty() &&
-                self.queue_2.processes.is_empty() &&
-                self.queue_3.processes.is_empty()
-            {
-                break;
-            }
-            if !self.queue_1.processes.is_empty() {
-                self.queue_1.start_and_end();
-            }
-            else if !self.queue_2.processes.is_empty() {
-                self.queue_2.start_and_end();
-            }
-            else if !self.queue_3.processes.is_empty() {
-                self.queue_3.start_and_end();
-            }
+    pub(crate) fn execute_next(&mut self) {
+        if !self.queue_1.processes.is_empty() {
+            self.queue_1.execute_next();
+        } else if !self.queue_2.processes.is_empty() {
+            self.queue_2.execute_next();
+        } else if !self.queue_3.processes.is_empty() {
+            self.queue_3.execute_next();
         }
     }
 }
@@ -951,24 +236,28 @@ impl MLQ {
 // Erfun
 
 pub struct MLFQ {
-    pub queue_1: SRF,
-    pub queue_2: RR,
-    pub queue_3: SRF
+    pub queue_1: ReadyQueue,
+    pub queue_2: ReadyQueue,
+    pub queue_3: ReadyQueue,
 }
 
 impl MLFQ {
-    pub(crate) fn init() -> Self {
-        let mut srf1 = SRF::init();
-        srf1.time_quantum = Duration::from_millis(30);
-        let mut rr2 = RR::init();
-        rr2.time_quantum = Duration::from_millis(50);
-        let mut srf3 = SRF::init();
-        srf3.time_quantum = Duration::from_millis(100);
+    pub(crate) fn init(
+        q1_d: QueueDiscipline,
+        q2_d: QueueDiscipline,
+        q3_d: QueueDiscipline,
+    ) -> Self {
+        let mut q1 = ReadyQueue::new(q1_d);
+        q1.time_quantum = Duration::from_millis(25);
+        let mut q2 = ReadyQueue::new(q2_d);
+        q2.time_quantum = Duration::from_millis(50);
+        let mut q3 = ReadyQueue::new(q3_d);
+        q3.time_quantum = Duration::from_millis(100);
 
-        MLFQ{
-            queue_1: srf1,
-            queue_2: rr2,
-            queue_3: srf3,
+        MLFQ {
+            queue_1: q1,
+            queue_2: q2,
+            queue_3: q3,
         }
     }
 
@@ -976,79 +265,53 @@ impl MLFQ {
         self.queue_1.enqueue(process);
     }
 
-        pub(crate) fn start(&mut self) {
-            loop {
-                if self.queue_1.processes.is_empty() &&
-                    self.queue_2.processes.is_empty() &&
-                    self.queue_3.processes.is_empty()
-                {
-                    break;
+    pub(crate) fn execute_next(&mut self) {
+        if !self.queue_1.processes.is_empty() {
+            let process = self.queue_1.execute_next();
+            if let Some(process) = process {
+                self.queue_2.enqueue(process)
+            }
+        } else if !self.queue_2.processes.is_empty() {
+            let process = self.queue_2.execute_next();
+            if let Some(process) = process {
+                if process.waiting_time >= process.cpu_burst_time {
+                    self.queue_1.enqueue(process)
+                } else {
+                    self.queue_3.enqueue(process)
                 }
-
-                if !self.queue_1.processes.is_empty() {
-                    let process = self.queue_1.start_and_return();
-                    if let Some(process) = process {
-                        self.queue_2.enqueue(process)
-                    }
-                }
-                else if !self.queue_2.processes.is_empty() {
-                    let process = self.queue_2.start_and_return();
-                    if let Some(process) = process {
-                        if process.waiting_time >= process.cpu_burst_time {
-                            self.queue_1.enqueue(process)
-                        } else{
-                            self.queue_2.enqueue(process)
-
-                        }
-                    }
-                }
-                else if !self.queue_3.processes.is_empty() {
-                    let process = self.queue_3.start_and_return();
-                    if let Some(process) = process {
-                        if process.waiting_time >= process.cpu_burst_time {
-                            self.queue_2.enqueue(process)
-                        } else{
-                            self.queue_3.enqueue(process)
-                        }
-                    }
+            }
+        } else if !self.queue_3.processes.is_empty() {
+            let process = self.queue_3.execute_next();
+            if let Some(process) = process {
+                if process.waiting_time >= process.cpu_burst_time {
+                    self.queue_2.enqueue(process)
+                } else {
+                    self.queue_3.enqueue(process)
                 }
             }
         }
+    }
 }
-
 
 // Testing -----------------------------------------------------------------------------------------
 
 pub fn test() {
-    let mut sjf = MLFQ::init();
-    sjf.enqueue(build_test_process());
-    sjf.enqueue(build_test_process());
-    sjf.enqueue(build_test_process());
-    sjf.enqueue(build_test_process());
-    sjf.enqueue(build_test_process());
+    let mut queue = ReadyQueue::new(QueueDiscipline::RR);
+    let process = build_test_process();
+    let process2 = build_test_process();
+    println!("process: {:?}, {:?}", process, process2);
+    queue.enqueue(process);
+    queue.enqueue(process2);
 
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_clone = Arc::clone(&stop_flag);
+    loop {
+        if queue.processes.is_empty() {
+            break;
+        }
+        queue.execute_next();
+    }
 
-    let handle = thread::spawn(move || {
-        // sjf.start(stop_flag_clone); // Pass stop_flag to the start method
-    });
-
-    sleep(Duration::from_secs(10));
-    stop_flag.store(true, Ordering::Relaxed); // Set the stop flag after 5 seconds
-
-    handle.join().unwrap();
+    let qq = queue.calculate_metrics();
+    println!("{:?}", qq);
 }
 
-pub fn test_two() {
-    let mut process = build_test_process();
-    process.cpu_burst_time = Duration::from_secs(8);
-
-    process.run_with_interrupt(Duration::from_secs(3));
-    println!("{:?}", process.processed_time);
-    process.run_with_interrupt(Duration::from_secs(3));
-    println!("{:?}", process.processed_time);
-    process.run_with_interrupt(Duration::from_secs(3));
-    println!("{:?}", process.processed_time);
-
-}
+pub fn test_two() {}
