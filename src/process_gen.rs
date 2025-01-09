@@ -1,9 +1,9 @@
-use std::{time::Duration};
+use rand::prelude::*;
 use std::error::Error;
 use std::thread::sleep;
+use std::time::Duration;
 use std::time::Instant;
 use uuid::Uuid;
-use rand::prelude::*;
 
 #[derive(Debug, Clone)]
 pub enum ProcessStatus {
@@ -11,14 +11,14 @@ pub enum ProcessStatus {
     Ready,
     Running,
     Waiting,
-    Terminated
+    Terminated,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum ProcessType {
     SystemProcess,
     InteractiveProcess,
-    BatchProcess
+    BatchProcess,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -66,7 +66,10 @@ impl Process {
 
         if self.last_execution.is_none() {
             self.last_execution = Some(current_time);
-            self.waiting_time += self.last_execution.unwrap().duration_since(self.arrival_time);
+            self.waiting_time += self
+                .last_execution
+                .unwrap()
+                .duration_since(self.arrival_time);
             self.metrics.response_time = self.waiting_time;
             self.metrics.total_waiting_time = self.waiting_time;
         }
@@ -79,8 +82,11 @@ impl Process {
         }
     }
 
-    pub fn run_with_interrupt(&mut self, &quantum_time: &Duration, &current_time: &Instant) -> Result<(), Box<dyn Error>> {
-
+    pub fn run_with_interrupt(
+        &mut self,
+        &quantum_time: &Duration,
+        &current_time: &Instant,
+    ) -> Result<(), Box<dyn Error>> {
         // calculate waiting time
         self.calculate_waiting_time(&current_time);
 
@@ -90,7 +96,7 @@ impl Process {
         if remaining_time >= quantum_time {
             sleep(quantum_time);
             self.processed_time += quantum_time;
-        } else{
+        } else {
             sleep(remaining_time);
             self.processed_time += remaining_time;
         }
@@ -104,12 +110,16 @@ impl Process {
         sleep(self.cpu_burst_time);
         self.processed_time = self.cpu_burst_time;
         self.metrics.total_time = self.cpu_burst_time + self.waiting_time;
-        Ok(())  // Returns Ok(()) if there is no error
+        Ok(()) // Returns Ok(()) if there is no error
     }
 
     pub fn new(cbt: Duration) -> Self {
         let mut rng = thread_rng();
-        let process_variants = [ProcessType::BatchProcess, ProcessType::SystemProcess, ProcessType::SystemProcess];
+        let process_variants = [
+            ProcessType::BatchProcess,
+            ProcessType::SystemProcess,
+            ProcessType::SystemProcess,
+        ];
         Process {
             id: Uuid::new_v4(),
             cpu_burst_time: cbt,
@@ -119,14 +129,12 @@ impl Process {
             waiting_time: Duration::from_secs(0),
             last_execution: None,
             process_type: process_variants[rng.gen_range(0..process_variants.len())],
-            metrics: Metrics::new()
+            metrics: Metrics::new(),
         }
     }
 }
 
 pub fn build_test_process() -> Process {
     let mut rng = thread_rng();
-    Process::new(
-        Duration::from_millis(rng.gen_range(0..500)),
-    )
+    Process::new(Duration::from_millis(rng.gen_range(0..500)))
 }

@@ -1,7 +1,7 @@
-use dialoguer::{theme::ColorfulTheme, Select, Input, Validator};
+use crate::simulator::Simulator;
+use dialoguer::{theme::ColorfulTheme, Input, Select, Validator};
 use std::fmt;
 use std::io::Write;
-use crate::simulator::Simulator;
 
 pub enum Queues {
     FIFO,
@@ -14,7 +14,6 @@ pub enum Queues {
     MLQ,
     MLFQ,
 }
-
 
 impl fmt::Display for Queues {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -41,7 +40,12 @@ fn clear_console() {
 fn print_variable(n_p: i32, sim_time: i32, queue: Option<Queues>) {
     println!("💻 Operating System Queueing Simulation");
     println!("--- Variables Selected ---");
-    println!("Number Of Processes: {}\nSelected Queue: {}\nSimulation Time: {}", n_p, queue.unwrap(), sim_time);
+    println!(
+        "Number Of Processes: {}\nSelected Queue: {}\nSimulation Time: {}",
+        n_p,
+        queue.unwrap(),
+        sim_time
+    );
     println!("--------------------------");
 }
 
@@ -69,17 +73,8 @@ pub fn run() {
             .unwrap();
 
         let queue_selection_options = vec![
-            "FIFO",
-            "SPN",
-            "FCFS",
-            "SJF",
-            "HRRN",
-            "RR",
-            "SRF",
-            "MLQ",
-            "MLFQ"
+            "FIFO", "SPN", "FCFS", "SJF", "HRRN", "RR", "SRF", "MLQ", "MLFQ",
         ];
-
 
         match selection {
             0 => {
@@ -109,16 +104,16 @@ pub fn run() {
                     6 => Queues::SRF,
                     7 => Queues::MLQ,
                     8 => Queues::MLFQ,
-                    _ => Queues::FIFO
+                    _ => Queues::FIFO,
                 };
                 let sim = Simulator::init(0.01, 0.001);
                 if n_p <= 0 {
                     println!("Wrong Number Of Processes Try Again");
-                    continue
+                    continue;
                 }
-                sim.run_simulate(n_p, selected_queue);
+                // sim.run_simulate(n_p, selected_queue);
             }
-            3 => {return}
+            3 => return,
             _ => println!("Invalid selection."),
         }
     }

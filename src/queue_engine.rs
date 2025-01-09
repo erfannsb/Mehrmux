@@ -22,7 +22,7 @@ use std::{process, thread};
 //if processes vector isn't empty then the process with the right priority based on the algorithm
 //would be chosen in the dequeue method. then the chosen process will be executed by calling
 //the run method.
-enum QueueDiscipline {
+pub enum QueueDiscipline {
     FIFO,
     SPN,
     FCFS,
@@ -31,8 +31,14 @@ enum QueueDiscipline {
     RR,
     SRF,
 }
+#[derive(Debug)]
+enum MetricValue {
+    DurationValue(Duration),
+    PercentageValue(f64),
+    IntegerValue(i32),
+}
 
-struct ReadyQueue {
+pub struct ReadyQueue {
     processes: Vec<Process>,
     discipline: QueueDiscipline,
     time_quantum: Duration,
@@ -114,7 +120,7 @@ impl ReadyQueue {
         }
     }
 
-    pub fn execute_next(&mut self) -> Option<Process>{
+    pub fn execute_next(&mut self) -> Option<Process> {
         if let Some(mut process) = self.dequeue() {
             let right_now = Instant::now();
             process.status = ProcessStatus::Running;
@@ -155,40 +161,64 @@ impl ReadyQueue {
         None
     }
 
-    pub fn calculate_metrics(&self) -> HashMap<String, Duration> {
+    pub fn calculate_metrics(&self) -> HashMap<String, MetricValue> {
+
+
         let process_metrics: Vec<Metrics> = self
             .finished_processes
             .iter()
             .map(|process| process.metrics)
             .collect();
         let length_of_processes: u32 = process_metrics.len() as u32;
-        let mut average_metrics: HashMap<String, Duration> = HashMap::new();
+        let mut average_metrics: HashMap<String, MetricValue> = HashMap::new();
 
         average_metrics.insert(
             String::from("average_turnaround_time"),
+            MetricValue::DurationValue(
             process_metrics
                 .iter()
                 .map(|m| m.total_time)
                 .sum::<Duration>()
-                / length_of_processes,
-        );
+                / length_of_processes
+            ));
         average_metrics.insert(
             String::from("average_waiting_time"),
+            MetricValue::DurationValue(
             process_metrics
                 .iter()
                 .map(|m| m.total_waiting_time)
                 .sum::<Duration>()
-                / length_of_processes,
-        );
+                / length_of_processes
+            ));
         average_metrics.insert(
             String::from("average_response_time"),
+            MetricValue::DurationValue(
             process_metrics
                 .iter()
                 .map(|m| m.response_time)
                 .sum::<Duration>()
-                / length_of_processes,
-        );
+                / length_of_processes
+            ));
+        let total_cpu_burst_time = self
+            .finished_processes
+            .iter()
+            .map(|p| p.cpu_burst_time)
+            .sum::<Duration>();
+        let total_time = self
+            .finished_processes
+            .iter()
+            .map(|p| p.metrics.total_time)
+            .sum::<Duration>();
+        average_metrics.insert(
+            String::from("cpu_utilization"),
+            MetricValue::PercentageValue(
+                (total_cpu_burst_time.as_secs_f64() / total_time.as_secs_f64()) * 100.0
+            ));
         average_metrics
+    }
+
+    pub fn is_queue_empty(&self) -> bool {
+        self.processes.is_empty()
     }
 }
 
@@ -229,6 +259,12 @@ impl MLQ {
         } else if !self.queue_3.processes.is_empty() {
             self.queue_3.execute_next();
         }
+    }
+
+    pub fn is_queue_empty(&self) -> bool {
+        self.queue_1.processes.is_empty() &&
+        self.queue_2.processes.is_empty() &&
+        self.queue_3.processes.is_empty()
     }
 }
 
@@ -290,6 +326,12 @@ impl MLFQ {
                 }
             }
         }
+    }
+
+    pub fn is_queue_empty(&self) -> bool {
+        self.queue_1.processes.is_empty() &&
+            self.queue_2.processes.is_empty() &&
+            self.queue_3.processes.is_empty()
     }
 }
 
