@@ -1,5 +1,5 @@
 use crate::simulator::Simulator;
-use dialoguer::{theme::ColorfulTheme, Input, Select, Validator};
+use dialoguer::{theme::ColorfulTheme, Input, Select};
 use std::fmt;
 use std::io::Write;
 
@@ -54,7 +54,6 @@ pub fn run() {
     println!("💻 Operating System Queueing Simulation");
     let mut n_p: i32 = 0;
     let mut queue: usize = 0;
-    let mut sim_time: i32 = 0;
 
     loop {
         // Display a menu of options
@@ -106,12 +105,12 @@ pub fn run() {
                     8 => Queues::MLFQ,
                     _ => Queues::FIFO,
                 };
-                let sim = Simulator::init(0.01, 0.001);
+                let mut sim = Simulator::init(0.01, 0.001);
                 if n_p <= 0 {
                     println!("Wrong Number Of Processes Try Again");
                     continue;
                 }
-                // sim.run_simulate(n_p, selected_queue);
+                sim.run_simulate(n_p, selected_queue);
             }
             3 => return,
             _ => println!("Invalid selection."),

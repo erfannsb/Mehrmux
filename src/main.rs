@@ -5,7 +5,5 @@ mod queue_engine;
 mod simulator;
 
 fn main() {
-    // cli::run();
-    // queue_engine::test();
-    simulator::test();
+    cli::run();
 }

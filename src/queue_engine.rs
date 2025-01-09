@@ -1,27 +1,8 @@
-use crate::process_gen::{build_test_process, Metrics, Process, ProcessStatus, ProcessType};
+use crate::process_gen::{Metrics, Process, ProcessStatus, ProcessType};
 use std::collections::HashMap;
-use std::io::Read;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use std::{process, thread};
-// Important Description ---------------------------------------------------------------------------
-//All queue structs should have these properties:
 
-// processes: vector of processes
-//current_process: to keep track of the current process running
-//current_time: to measure the time passed while running the queue algorithm
-//context_switch_duration: arbitrary duration for hypothetical context switching process
-
-//every queue should inherit from ReadyQueue trait and define its own enqueue and dequeue method
-
-//every queue should implement start method in which there will be an infinite loop which never
-//stops (by adding stop_flag in start method parameter we can then pass an atomic boolean to stop
-//the loop). the loop would do nothing unless there is at least one process in the processes vector!
-//if processes vector isn't empty then the process with the right priority based on the algorithm
-//would be chosen in the dequeue method. then the chosen process will be executed by calling
-//the run method.
 pub enum QueueDiscipline {
     FIFO,
     SPN,
@@ -223,7 +204,6 @@ impl ReadyQueue {
 }
 
 // MLQ Algorithm -----------------------------------------------------------------------------------
-// Meownoosh
 
 pub struct MLQ {
     pub queue_1: ReadyQueue,
@@ -269,7 +249,6 @@ impl MLQ {
 }
 
 // MLFQ Algorithm ----------------------------------------------------------------------------------
-// Erfun
 
 pub struct MLFQ {
     pub queue_1: ReadyQueue,
@@ -334,26 +313,3 @@ impl MLFQ {
             self.queue_3.processes.is_empty()
     }
 }
-
-// Testing -----------------------------------------------------------------------------------------
-
-pub fn test() {
-    let mut queue = ReadyQueue::new(QueueDiscipline::RR);
-    let process = build_test_process();
-    let process2 = build_test_process();
-    println!("process: {:?}, {:?}", process, process2);
-    queue.enqueue(process);
-    queue.enqueue(process2);
-
-    loop {
-        if queue.processes.is_empty() {
-            break;
-        }
-        queue.execute_next();
-    }
-
-    let qq = queue.calculate_metrics();
-    println!("{:?}", qq);
-}
-
-pub fn test_two() {}

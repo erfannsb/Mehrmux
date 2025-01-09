@@ -36,14 +36,6 @@ impl Metrics {
             total_waiting_time: Duration::from_millis(0),
         }
     }
-
-    fn averages(&mut self, number_of_process: usize) -> (Duration, Duration, Duration) {
-        (
-            self.total_waiting_time / number_of_process as u32,
-            self.total_time / number_of_process as u32,
-            self.total_waiting_time / number_of_process as u32,
-        )
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -132,9 +124,4 @@ impl Process {
             metrics: Metrics::new(),
         }
     }
-}
-
-pub fn build_test_process() -> Process {
-    let mut rng = thread_rng();
-    Process::new(Duration::from_millis(rng.gen_range(0..500)))
 }

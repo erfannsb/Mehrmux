@@ -1,11 +1,6 @@
 use crate::cli::Queues;
-use crate::process_gen::{build_test_process, Process, ProcessType};
+use crate::process_gen::{Process};
 use rand_distr::{Distribution, Exp};
-use std::env::current_exe;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::thread::{sleep, spawn, Thread};
 use std::time::{Duration, Instant};
 use crate::queue_engine::{QueueDiscipline, ReadyQueue, MLFQ, MLQ};
 
@@ -157,9 +152,4 @@ impl Simulator {
             lambda_rate_cbt,
         }
     }
-}
-
-pub fn test() {
-    let mut sim = Simulator::init(0.01, 0.001);
-    sim.run_simulate(10, Queues::SPN);
 }
