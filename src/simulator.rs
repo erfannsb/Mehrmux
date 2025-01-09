@@ -4,6 +4,7 @@ use rand_distr::{Distribution, Exp};
 use std::time::{Duration, Instant};
 use crate::queue_engine::{QueueDiscipline, ReadyQueue, MLFQ, MLQ};
 
+// Utils -------------------------------------------------------------------------------------------
 pub struct ExponentialGenerator {
     rate: f64, // Rate parameter (lambda) for the exponential distribution
 }
@@ -43,11 +44,15 @@ impl ExponentialGenerator {
 }
 
 enum Queue {
+    // since there are multiple queue types rust prevent us to use a single value to store
+    // ready queue, mlq, mlfq in single variable since they are different structs.
+    // therefore using a multi type Queue enum is necessary
     ReadyQueue(ReadyQueue),
     MultiLevel(MLQ),
     MultiLevelFeedBack(MLFQ),
 }
 
+// Simulation: -------------------------------------------------------------------------------------
 pub struct Simulator {
     lambda_rate_arrival: f64,
     lambda_rate_cbt: f64,

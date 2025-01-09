@@ -3,7 +3,11 @@ use dialoguer::{theme::ColorfulTheme, Input, Select};
 use std::fmt;
 use std::io::Write;
 
+// Utils -------------------------------------------------------------------------------------------
+
 pub enum Queues {
+    // we use this enum to find out which algorithm is selected by the user.
+    //typically using enum is cleaner than to use strings
     FIFO,
     SPN,
     FCFS,
@@ -16,6 +20,7 @@ pub enum Queues {
 }
 
 impl fmt::Display for Queues {
+
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Queues::FIFO => write!(f, "FIFO"),
@@ -49,6 +54,7 @@ fn print_variable(n_p: i32, sim_time: i32, queue: Option<Queues>) {
     println!("--------------------------");
 }
 
+// cli ---------------------------------------------------------------------------------------------
 pub fn run() {
     clear_console();
     println!("💻 Operating System Queueing Simulation");

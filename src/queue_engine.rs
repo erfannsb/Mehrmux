@@ -3,7 +3,12 @@ use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+// Utils -------------------------------------------------------------------------------------------
+
 pub enum QueueDiscipline {
+    /// queue discipline is the way cpu scheduler prioritize processes
+    /// with this enum we choose the algorithm and pass it to the ready
+    /// queue
     FIFO,
     SPN,
     FCFS,
@@ -14,17 +19,23 @@ pub enum QueueDiscipline {
 }
 #[derive(Debug)]
 enum MetricValue {
+    // Since metric values' types differ. in order to store these metrics in a single
+    // hashmap we need to define this enum to store multiple types inside of it.
     DurationValue(Duration),
     PercentageValue(f64),
     IntegerValue(i32),
 }
+
+
+// Ready Queue -------------------------------------------------------------------------------------
 
 pub struct ReadyQueue {
     processes: Vec<Process>,
     discipline: QueueDiscipline,
     time_quantum: Duration,
     context_switch: Duration,
-    finished_processes: Vec<Process>,
+    finished_processes: Vec<Process>, // processes that finished their process time are pushed
+                                      // into this vector so rust won't drop their value.
 }
 
 impl ReadyQueue {
@@ -203,7 +214,7 @@ impl ReadyQueue {
     }
 }
 
-// MLQ Algorithm -----------------------------------------------------------------------------------
+// MultiLevel Queue --------------------------------------------------------------------------------
 
 pub struct MLQ {
     pub queue_1: ReadyQueue,
@@ -248,7 +259,7 @@ impl MLQ {
     }
 }
 
-// MLFQ Algorithm ----------------------------------------------------------------------------------
+// MultiLevel FeedBack Algorithm -------------------------------------------------------------------
 
 pub struct MLFQ {
     pub queue_1: ReadyQueue,
