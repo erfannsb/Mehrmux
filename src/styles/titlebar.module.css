@@ -1,0 +1,48 @@
+.titlebar {
+    display: flex;
+    justify-content: space-between;
+    -webkit-app-region: drag;
+    padding: 1em;
+    grid-area: 1 / 1 / 2 / 4;
+}
+
+.controlbars {
+    display: flex;
+    align-items: center;
+}
+
+.controlbars button{
+    width: 20px;
+    height: 20px;
+    margin-left: 8px;
+    border-radius: 100%;
+    border: none;
+    outline: none;
+}
+
+.controlbars button:hover {
+    opacity: 0.8;
+}
+
+.controlbars button:nth-child(3){
+    background-color: #D47272;
+}
+
+.controlbars button:nth-child(2){
+    background-color: #489DC2;
+}
+
+.controlbars button:nth-child(1){
+    background-color: #63D2AB;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+}
+
+.logo h4 {
+    margin-left: .5em;
+    font-family: 'Jura', serif !important;
+    font-size: 1.2em;
+}

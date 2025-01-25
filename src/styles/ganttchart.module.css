@@ -1,0 +1,165 @@
+.main {
+    grid-area: 2 / 2 / 3 / 3;
+    display: grid;
+    grid-auto-columns: 1fr;
+    grid-auto-rows: 1fr max-content max-content;
+    margin-bottom: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #CAD7F4;
+}
+
+.finished, .readyQueue {
+    border: #2C3140 2px solid;
+    border-radius: 10px;
+    display: flex;
+    height: 80px;
+    overflow: auto;
+}
+
+.finished > .title, .readyQueue > .title {
+    width: 150px;
+    min-width: 150px;
+    height: 100%;
+    border-radius: 10px 0px 0px 10px;
+    padding: 1.1em 0em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-weight: bold;
+    background-color: #0F1421;
+    border-right: #2C3140 2px solid;
+}
+
+.finished {
+    margin-top: .6em;
+}
+
+.process_card_in_queue {
+    height: 100%;
+    min-width: 200px;
+    border-right: #2C3140 2px solid;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 0em .8em;
+    background-color: #0F1421;
+
+}
+
+.process_card_in_queue h3 {
+    font-size: 14px;
+
+}
+
+.process_card_in_queue p {
+    font-size: 10px;
+}
+
+.gantt {
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: .6em;
+}
+.gantt_main {
+    flex-grow: 1;
+    border-style: solid;
+    border-color: #2C3140;
+    border-width: 0px 2px 0px 2px;
+    padding: .3em 1em;
+}
+
+.gantt_head {
+    border: #2C3140 2px solid;
+    border-radius: 10px 10px 0px 0px;
+    padding: 1em;
+    display: flex;
+    justify-content: space-between;
+    background-color: #0F1421;
+    font-size: 14px;
+    user-select: none;
+}
+
+
+.gantt_head .info {
+    font-size: 12px;
+    font-weight: 300;
+}
+
+
+.gantt_footer {
+    border: #2C3140 2px solid;
+    padding: 1em;
+    height: 50px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-direction: row-reverse;
+    border-radius: 0px 0px 10px 10px;
+}
+.gantt_footer .info {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 7px;
+}
+
+text[text-anchor="middle"]{
+    fill: #7E7BA4 !important;
+    color: white !important;
+    font-family: "JetBrains Mono", monospace !important;
+}
+
+text[text-anchor="end"]{
+    fill: #7E7BA4 !important;
+    color: white !important;
+    font-family: "JetBrains Mono", monospace !important;
+}
+
+text[text-anchor="start"]{
+    font-family: "JetBrains Mono", monospace !important;
+}
+
+svg[aria-label="A chart."] > g:nth-child(2) > rect{
+    stroke: #0E1420 !important;
+    stroke-width: 1px !important ;
+}
+
+svg[aria-label="A chart."] > g:nth-child(2) > path{
+    stroke: #1F222D !important;
+    stroke-width: 1px !important ;
+}
+
+.multiChartCont {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 10px;
+    height: 100%;
+}
+
+.multiChartCont > div {
+    background-color: #0F1421;
+    display: flex;
+    align-items: center;
+}
+.multiChartCont .thechart {
+    border: #2C3140 2px solid;
+    border-left: 0px;
+}
+
+.multiChartCont .chartTitle {
+    background-color: #0F1421;
+    border-radius: 10px 0px 0px 10px;
+    border: #2C3140 2px solid;
+    display: flex;
+    width: 30px;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+}
+
+.chartTitle span {
+    transform: rotate(-90deg);
+}

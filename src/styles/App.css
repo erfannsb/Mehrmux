@@ -1,0 +1,90 @@
+@font-face {
+  font-family: 'Jura';
+  src: url('../../public/fonts/Jura/Jura-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900; /* Define weight range */
+  font-style: normal;
+}
+
+/* Variable Font 2 */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../../public/fonts/JetBrains_Mono/JetBrainsMono-VariableFont_wght.ttf') format('truetype');
+  font-weight: 200 700; /* Define weight range */
+  font-style: normal;
+}
+
+/* Static Font */
+@font-face {
+  font-family: 'Poppins';
+  src: url('../../public/fonts/Poppins/Poppins-Bold.ttf') format('truetype');
+  font-weight: 800; /* Static weight */
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('../../public/fonts/Press_Start_2P/PressStart2P-Regular.ttf') format('truetype');
+}
+
+* {
+  padding: 0px;
+  box-sizing: border-box;
+  margin: 0px;
+  border: none;
+}
+
+body {
+  background-color: #06101B;
+  color: white;
+  overflow: hidden;
+
+}
+
+.container {
+  display: grid;
+  grid-template-columns: max-content 1fr minmax(300px, 25%);
+  grid-template-rows: 50px calc(100vh - 50px);
+  column-gap: 10px;
+  height: 100vh;
+  padding-bottom: 1em;
+  overflow: hidden;
+}
+
+.interstitial-wrapper {
+  position: absolute;
+  left: -106px;
+  top: -157px;
+  transform: scale(0.6);
+}
+
+::-webkit-scrollbar {
+  width: 5px !important ;
+  height: 4px !important  ;
+}
+
+::-webkit-scrollbar-track {
+  background: #06101B !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #142b3e;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #50729f;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.splide__arrow {
+  background-color: transparent  !important;
+}
+
+.splide__arrow svg {
+  fill: #CAD7F4 !important;
+}
+
