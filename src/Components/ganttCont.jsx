@@ -3,6 +3,7 @@ import styles from "./../styles/ganttchart.module.css"
 import ChromeDinoGame from 'react-chrome-dino';
 import {listen} from "@tauri-apps/api/event";
 import {Chart} from "react-google-charts";
+import Dino from "./dino.jsx";
 // import Chart from "./chart.jsx";
 
 export default function GanttCont({processes, restartChart, firstDate, selectedAlgo}) {

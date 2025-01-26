@@ -23,18 +23,31 @@ export default function IoCont({selectedAlgo, restartChart, restart, handleDate}
     const refSelectQ3 = useRef(null);
     const refSelectQ4 = useRef(null);
     const [notify, setNotify] = React.useState(false);
+    const refMQ_CS = useRef(null);
+    const refMQ_TS = useRef(null);
     const [isRunning, setRunning] = React.useState(false);
     const [whichTab, setTab] = React.useState(0);
     const [nextForm, setNextForm] = React.useState(true);
     const [to_be_generated_processes, setToBeGeneratedProcesses] = useState([]);
-
-    const [maxValue, setMaxValue] = useState(0)
+    const [whichMeow, setMeow] = React.useState("TT");
 
     const [chartData, setData] = React.useState([
-        {subject: 'TT'},
+        {subject: 'TT', TT: 30},
         {subject: 'WT'},
         {subject: 'RT',},
         {subject: 'CU',},
+    ]);
+
+    const [multiChart, setMultiChart] = React.useState([
+        {name: "FCFS", WT: 20, TT: 30},
+        {name: "SPN", WT: 23, CU: 40, RT: 50},
+        {name: "SJF"},
+        {name: "HRRN"},
+        {name: "RR"},
+        {name: "MLQ"},
+        {name: "MLFQ"},
+        {name: "SRTF"},
+        {name: "FIFO"},
     ]);
 
     useEffect(() => {
@@ -65,7 +78,6 @@ export default function IoCont({selectedAlgo, restartChart, restart, handleDate}
                 cu['CU'] = metrics.cpu_utilization.PercentageValue.toFixed(2);
             }
             let data = [tt, wt, rt, cu];
-            setMaxValue(Math.max(...data.map(data => data.A)));
             console.log(data);
             setData(data);
             setRunning(false)
@@ -289,7 +301,42 @@ export default function IoCont({selectedAlgo, restartChart, restart, handleDate}
 
     const onNextClick = (e) => {
         e.preventDefault();
-        setNextForm(false);
+
+        const cs = refMQ_CS.current.value;
+        const ts = refMQ_TS.current.value;
+
+        const selectedQ1 = Array.from(refSelectQ1.current.selectedOptions).map(
+            (option) => option.value
+        )[0];
+        const selectedQ2 = Array.from(refSelectQ2.current.selectedOptions).map(
+            (option) => option.value
+        )[0];
+        const selectedQ3 = Array.from(refSelectQ3.current.selectedOptions).map(
+            (option) => option.value
+        )[0];
+        const selectedQ4 = Array.from(refSelectQ4.current.selectedOptions).map(
+            (option) => option.value
+        )[0];
+
+        if (cs < 1 || cs > 100000) {
+            notify_this("Context Switch Must Be Between 1 and 100000");
+            return false;
+        }
+
+        if (ts < 1 || ts > 100000) {
+            if (isPreemptive) {
+                notify_this("Time Slice Must Be Between 1 and 100000");
+                return false;
+            }
+        }
+
+        if (!cs || !ts) {
+            notify_this("Please Fill All Required Fields");
+            return false;
+        }
+
+        console.log({selectedQ1, selectedQ2, selectedQ3, selectedQ4, ts, cs})
+        // setNextForm(false);
     }
     return <div className={styles.main}>
         <div className={styles.inputs}>
@@ -370,11 +417,11 @@ export default function IoCont({selectedAlgo, restartChart, restart, handleDate}
                                 </div>
                                 <div>
                                     <label htmlFor="csq">Context Switch:</label>
-                                    <input id="csq" ref={refM_AT} type="number" defaultValue={1}/>
+                                    <input id="csq" ref={refMQ_CS} type="number" defaultValue={1}/>
                                 </div>
                                 <div>
                                     <label htmlFor="tmq">Time Slice:</label>
-                                    <input id="tmq" ref={refM_AT} type="number" defaultValue={1}/>
+                                    <input id="tmq" ref={refMQ_TS} type="number" defaultValue={1}/>
                                 </div>
                                 <div>
                                     <input id="" type="submit" value="next" onClick={onNextClick}/>
@@ -431,7 +478,7 @@ export default function IoCont({selectedAlgo, restartChart, restart, handleDate}
                 }} hasTrack={false}>
                     <SplideTrack className={styles.tracker}>
                         <SplideSlide className={styles.slide}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="90%" height="100%" style={{marginRight: "40px"}}>
                                 <BarChart
                                     data={chartData}
                                 >
@@ -448,15 +495,75 @@ export default function IoCont({selectedAlgo, restartChart, restart, handleDate}
                             </ResponsiveContainer>
                         </SplideSlide>
                         <SplideSlide className={styles.slider}>
-                            <h4>Average Statistic:</h4>
-                            <p>Average Response Time: <span
-                                style={{color: "rgb(106, 110, 122)"}}>{chartData[2]['RT'] || 0}ms</span></p>
-                            <p>Average Waiting Time: <span
-                                style={{color: "rgb(106, 110, 122)"}}>{chartData[1]['WT'] || 0}ms</span></p>
-                            <p>Average Turnaround Time: <span
-                                style={{color: "rgb(106, 110, 122)"}}>{chartData[0]['TT'] || 0}ms</span></p>
-                            <p>CPU Utilization: <span
-                                style={{color: "rgb(106, 110, 122)"}}>{chartData[3]['CU'] || 0}%</span></p>
+                            <div className={styles.selectWhichX}>
+                                <div style={{display: "flex", alignItems: "center"}} onClick={()=> {setMeow("WT")}}>
+                                    <div style={{
+                                        backgroundColor: "#FF5722",
+                                        width: "10px",
+                                        height: "10px",
+                                        marginRight: "10px",
+                                        border: "white 2px solid"
+                                    }}></div>
+                                    WT
+                                </div>
+                                <div style={{display: "flex", alignItems: "center"}} onClick={()=> {setMeow("TT")}}>
+                                    <div style={{
+                                        backgroundColor: "#8884d8",
+                                        width: "10px",
+                                        height: "10px",
+                                        marginRight: "10px",
+                                        border: "white 2px solid"
+                                    }}></div>
+                                    TT
+                                </div>
+                                <div style={{display: "flex", alignItems: "center"}} onClick={()=> {setMeow("RT")}}>
+                                    <div style={{
+                                        backgroundColor: "#3FC1C9",
+                                        width: "10px",
+                                        height: "10px",
+                                        marginRight: "10px",
+                                        border: "white 2px solid"
+                                    }}></div>
+                                    RT
+                                </div>
+                                <div style={{display: "flex", alignItems: "center"}} onClick={()=> {setMeow("CU")}}>
+                                    <div style={{
+                                        backgroundColor: "#B8DE6F",
+                                        width: "10px",
+                                        height: "10px",
+                                        marginRight: "10px",
+                                        border: "white 2px solid"
+                                    }}></div>
+                                    CU
+                                </div>
+                            </div>
+                            <ResponsiveContainer width="90%" height="100%" style={{marginRight: "40px"}}>
+                                <BarChart
+                                    data={multiChart}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3"/>
+                                    <XAxis dataKey="name" fontSize="9px" dx="5px"/>
+                                    <YAxis/>
+                                    <Tooltip/>
+                                    <Legend/>
+                                    {
+                                        whichMeow == "WT" &&
+                                        <Bar dataKey="WT" fill="#FF5722" activeBar={<Rectangle fill="pink"/>}/>
+                                    }
+                                    {
+                                        whichMeow == "TT" &&
+                                        <Bar dataKey="TT" fill="#8884d8" activeBar={<Rectangle fill="pink"/>}/>
+                                    }
+                                    {
+                                        whichMeow == "RT" &&
+                                        <Bar dataKey="RT" fill="#3FC1C9" activeBar={<Rectangle fill="pink"/>}/>
+                                    }
+                                    {
+                                        whichMeow == "CU" &&
+                                        <Bar dataKey="CU" fill="#B8DE6F" activeBar={<Rectangle fill="pink"/>}/>
+                                    }
+                                </BarChart>
+                            </ResponsiveContainer>
                         </SplideSlide>
                     </SplideTrack>
                 </Splide>

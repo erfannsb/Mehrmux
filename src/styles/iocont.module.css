@@ -201,3 +201,10 @@ form input[type="submit"]:active {
     background-color: #0F1421;
     transform: scale(1.01);
 }
+
+.selectWhichX {
+    display: flex;
+    margin: 10px auto;
+    justify-content: space-around;
+    width: 60%;
+}
