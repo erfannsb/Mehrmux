@@ -3,18 +3,25 @@ import styles from "./../styles/ganttchart.module.css"
 import ChromeDinoGame from 'react-chrome-dino';
 import {listen} from "@tauri-apps/api/event";
 import {Chart} from "react-google-charts";
-import Dino from "./dino.jsx";
-// import Chart from "./chart.jsx";
 
 export default function GanttCont({processes, restartChart, firstDate, selectedAlgo}) {
     const [processEvent, setProcessEvent] = useState([]);
     const [finishedP, setFinishedP] = useState([]);
     const [rows, setRows] = useState([]);
+    const [rows1, setRows1] = useState([]);
+    const [rows2, setRows2] = useState([]);
+    const [rows3, setRows3] = useState([]);
+    const [rows4, setRows4] = useState([]);
     let [passed_times_for_all, setPTFA] = useState({});
 
     useEffect(() => {
         console.log("Resetting chart........................");
+        console.log("selected algo after reset: ",selectedAlgo)
         setRows([]);          // Reset rows
+        setRows1([]);
+        setRows2([]);
+        setRows3([]);
+        setRows4([]);
         setFinishedP([]);     // Reset finished processes
     }, [restartChart]); // Trigger effect when `restartChart` changes
 
@@ -25,7 +32,15 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
         });
 
         const unlistenPF = listen('finished_process', (event) => {
-            setFinishedP([...event.payload])
+            console.log(selectedAlgo)
+            if (selectedAlgo == "MLFQ" || selectedAlgo == "MLQ") {
+                console.log("what the hell is this finished queue about?")
+                console.log([...finishedP,...event.payload])
+                setFinishedP([...finishedP,...event.payload])
+            } else {
+                console.log("oh helllll naaaaaaaaaa")
+                setFinishedP([...event.payload])
+            }
         });
 
         return () => {
@@ -53,21 +68,32 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
     ];
 
     useEffect(()=> {
-        if(processEvent == undefined || processEvent.length == 0) {
+        let pE = processEvent[1]
+        let numOfQ = processEvent[0]
+        console.log({numOfQ, pE})
+        if(pE == undefined || pE.length == 0) {
             return  
         }
-        let keyNameForPassedTimes = processEvent.id.slice(0, 8);
-        const last_execution = calculateTimeWithDate(processEvent.last_execution)
+        let keyNameForPassedTimes = pE.id.slice(0, 8);
+        const last_execution = calculateTimeWithDate(pE.last_execution)
         const start_time = new Date(0,0,0,0,0,0, last_execution)
         let passed_time;
         if(passed_times_for_all[keyNameForPassedTimes] == undefined){
-            passed_time = processEvent.processed_time.secs + processEvent.processed_time.nanos / 10e9;
+            passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
+            console.log("passed damn time till first time: ", passed_time)
+            console.log(pE.processed_time.secs + pE.processed_time.nanos)
+            console.log(1e9)
+            console.log(pE.processed_time.secs + pE.processed_time.nanos / 1e9)
             passed_time = passed_time * 1000;
             let ptfa = {...passed_times_for_all}
             ptfa[keyNameForPassedTimes] = passed_time;
             setPTFA({...passed_times_for_all, ...ptfa});
         } else {
-            passed_time = processEvent.processed_time.secs + processEvent.processed_time.nanos / 10e9;
+            passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
+            console.log("damn passed_time: ", passed_time);
+            console.log(pE.processed_time.secs + pE.processed_time.nanos)
+            console.log(1e9)
+            console.log(pE.processed_time.secs + pE.processed_time.nanos / 1e9)
             passed_time = passed_time * 1000;
             passed_time = passed_time - passed_times_for_all[keyNameForPassedTimes];
             let ptfa = {...passed_times_for_all}
@@ -76,10 +102,30 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
         }
 
         let end_time = new Date(0,0,0,0,0, 0, last_execution + passed_time);
-        setRows([...rows, [processEvent.id.slice(0,8), `Process: ${processEvent.id.slice(0,8)}`, start_time, end_time]])
+        if (selectedAlgo == "MLQ" || selectedAlgo == "MLFQ") {
+            switch (numOfQ) {
+                case 1:
+                    setRows1([...rows1, [pE.id.slice(0,8), `Process: ${pE.id.slice(0,8)}`, start_time, end_time]])
+                    break;
+                case 2:
+                    setRows2([...rows2, [pE.id.slice(0,8), `Process: ${pE.id.slice(0,8)}`, start_time, end_time]])
+                    break;
+                case 3:
+                    setRows3([...rows3, [pE.id.slice(0,8), `Process: ${pE.id.slice(0,8)}`, start_time, end_time]])
+                    break;
+                case 4:
+                    setRows4([...rows4, [pE.id.slice(0,8), `Process: ${pE.id.slice(0,8)}`, start_time, end_time]])
+            }
+        } else {
+            setRows([...rows, [pE.id.slice(0,8), `Process: ${pE.id.slice(0,8)}`, start_time, end_time]])
+        }
     }, [processEvent])
 
     const data = [columns, ...rows];
+    const data1 = [columns, ...rows1];
+    const data2 = [columns, ...rows2];
+    const data3 = [columns, ...rows3];
+    const data4 = [columns, ...rows4];
     const colors = [
         "#F38181", // Coral Red
         "#FCE38A", // Lemon Yellow
@@ -102,26 +148,6 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
         "#F8B195", // Peach Pink
         "#355C7D"  // Slate Blue
     ];
-    function formatDateToTime(dateString) {
-        let date = new Date(dateString);
-        // Use Intl.DateTimeFormat to convert to Tehran time zone
-        let options = {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            fractionalSecond: '3-digit', // For milliseconds
-            timeZone: 'Asia/Tehran',
-        };
-
-        // Use Intl.DateTimeFormat to get the time in Tehran time zone
-        let tehranTime = new Intl.DateTimeFormat('en-GB', options).format(date);
-
-        // Extract milliseconds manually
-        let milliseconds = date.getMilliseconds();
-
-        // Return formatted time with milliseconds
-        return `${tehranTime}.${milliseconds}`;
-    }
 
     function turnToNormalDuration(duration) {
         let secs_to_millis = duration.secs * 1000;
@@ -142,7 +168,7 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
                     <div className={styles.multiChartCont}>
                         <div>
                             <div className={styles.chartTitle}><span>Q1</span></div>
-                            <Chart className={styles.thechart} chartType="Timeline" data={data} width="100%"
+                            <Chart className={styles.thechart} chartType="Timeline" data={data1} width="100%"
                                    height="100%" options={{
                                 colors: colors,
                                 backgroundColor: "#0E1321",
@@ -150,7 +176,7 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
                         </div>
                         <div>
                             <div className={styles.chartTitle}><span>Q2</span></div>
-                            <Chart className={styles.thechart} chartType="Timeline" data={data} width="100%"
+                            <Chart className={styles.thechart} chartType="Timeline" data={data2} width="100%"
                                    height="100%" options={{
                                 colors: colors,
                                 backgroundColor: "#0E1321",
@@ -158,7 +184,7 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
                         </div>
                         <div>
                             <div className={styles.chartTitle}><span>Q3</span></div>
-                            <Chart className={styles.thechart} chartType="Timeline" data={data} width="100%"
+                            <Chart className={styles.thechart} chartType="Timeline" data={data3} width="100%"
                                    height="100%" options={{
                                 colors: colors,
                                 backgroundColor: "#0E1321",
@@ -166,7 +192,7 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
                         </div>
                         <div>
                             <div className={styles.chartTitle}><span>Q4</span></div>
-                            <Chart className={styles.thechart} chartType="Timeline" data={data} width="100%"
+                            <Chart className={styles.thechart} chartType="Timeline" data={data4} width="100%"
                                    height="100%" options={{
                                 colors: colors,
                                 backgroundColor: "#0E1321",

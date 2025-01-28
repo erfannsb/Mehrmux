@@ -1,5 +1,5 @@
 use crate::cli::Queues;
-use crate::process_gen::Process;
+use crate::process_gen::{Process, ProcessType};
 use crate::queue_engine::{QueueDiscipline, ReadyQueue, MLFQ, MLQ};
 use rand_distr::{Distribution, Exp};
 use std::thread;
@@ -26,7 +26,7 @@ impl ExponentialGenerator {
             let result = exp.sample(&mut rng);
 
             // Break the result into the integer part (seconds) and the fractional part (nanoseconds)
-            let secs = result.floor() as u64;               // Integer part as seconds
+            let secs = result.floor() as u64; // Integer part as seconds
             let nanos = ((result - secs as f64) * 1e9).round() as u32; // Fractional part as nanoseconds
 
             if secs > 0 || nanos > 0 {
@@ -64,25 +64,47 @@ pub struct Simulator {
 }
 
 impl Simulator {
-    pub fn generate_queue(queue_discipline: Queues, context_switch: Duration, time_quantum: Duration) -> Queue {
+    pub fn generate_queue(
+        queue_discipline: Queues,
+        context_switch: Duration,
+        time_quantum: Duration,
+        list_of_disciplines: Option<[String; 4]>,
+    ) -> Queue {
         //generating The Ready queue based on single or multi level
+        let mut selected_disciplines: [QueueDiscipline; 4] = [QueueDiscipline::RR; 4]; // Initialize with default values (e.g., RR)
+
+        if let Some(list) = list_of_disciplines {
+            for (index, element) in list.iter().enumerate() {
+                selected_disciplines[index] = match element.trim() {
+                    "RR" => QueueDiscipline::RR,
+                    "SJF" => QueueDiscipline::SJF,
+                    "SRTF" => QueueDiscipline::SRF, // Fixed typo
+                    "FCFS" => QueueDiscipline::FCFS,
+                    "SPN" => QueueDiscipline::SPN,
+                    "HRRN" => QueueDiscipline::HRRN,
+                    _ => QueueDiscipline::RR, // Default case
+                };
+            }
+        }
+
         let mut queue: Queue;
         if let Queues::MLFQ = queue_discipline {
             queue = Queue::MultiLevelFeedBack(MLFQ::init(
-                QueueDiscipline::RR,
-                QueueDiscipline::RR,
-                QueueDiscipline::FCFS,
+                selected_disciplines[0],
+                selected_disciplines[1],
+                selected_disciplines[2],
+                selected_disciplines[3],
                 context_switch,
                 time_quantum,
             ));
-
         } else if let Queues::MLQ = queue_discipline {
             queue = Queue::MultiLevel(MLQ::init(
-                QueueDiscipline::RR,
-                QueueDiscipline::RR,
-                QueueDiscipline::FCFS,
+                selected_disciplines[0],
+                selected_disciplines[1],
+                selected_disciplines[2],
+                selected_disciplines[3],
                 context_switch,
-                time_quantum
+                time_quantum,
             ));
         } else {
             //convert queue type to queues_discipline
@@ -96,7 +118,11 @@ impl Simulator {
                 Queues::SRF => QueueDiscipline::SRF,
                 _ => QueueDiscipline::FCFS,
             };
-            queue = Queue::ReadyQueue(ReadyQueue::new(queue_discipline, context_switch, time_quantum));
+            queue = Queue::ReadyQueue(ReadyQueue::new(
+                queue_discipline,
+                context_switch,
+                time_quantum,
+            ));
         }
         queue
     }
@@ -112,7 +138,7 @@ impl Simulator {
     fn execute_queue(q: &mut Queue, window: &Window) {
         match q {
             Queue::ReadyQueue(ref mut R) => {
-                R.execute_next(window);
+                R.execute_next(window, false);
             }
             Queue::MultiLevel(ref mut MLQ) => {
                 MLQ.execute_next(window);
@@ -146,14 +172,14 @@ impl Simulator {
             Queue::ReadyQueue(ref mut R) => {
                 let data = R.calculate_metrics();
                 window.emit("send_metrics", data).unwrap();
-            },
+            }
             Queue::MultiLevel(ref mut MLQ) => {
                 let data = MLQ.calculate_metric();
-                window.emit("send_metrics", data).unwrap();
-            },
+                window.emit("send_metrics_mlq", data).unwrap();
+            }
             Queue::MultiLevelFeedBack(ref mut MLFQ) => {
                 let data = MLFQ.calculate_metric();
-                window.emit("send_metrics", data).unwrap()
+                window.emit("send_metrics_mlfq", data).unwrap()
             }
         }
     }
@@ -165,6 +191,7 @@ impl Simulator {
         window: Window,
         context_switch: Duration,
         time_quantum: Duration,
+        list_of_disciplines: Option<[String; 4]>,
     ) {
         let lambda_rate_arrival = self.lambda_rate_arrival.clone();
         let lambda_rate_cbt = self.lambda_rate_cbt.clone();
@@ -187,7 +214,12 @@ impl Simulator {
 
             println!("{:?}", generated_random_numbers);
             //generating queue: ------------------------------------------------------------------------
-            let mut queue = Simulator::generate_queue(queue_discipline, context_switch, time_quantum);
+            let mut queue = Simulator::generate_queue(
+                queue_discipline,
+                context_switch,
+                time_quantum,
+                list_of_disciplines,
+            );
 
             // running the simulation ------------------------------------------------------------------
             loop {
@@ -200,14 +232,18 @@ impl Simulator {
 
                 //check if the current time passed the first arrival time
                 if (!generated_random_numbers.is_empty()) {
-                    while right_now >= generated_random_numbers.get(0).unwrap_or(&(SystemTime::now(),Duration::from_secs(0))).0 {
+                    while right_now
+                        >= generated_random_numbers
+                            .get(0)
+                            .unwrap_or(&(SystemTime::now(), Duration::from_secs(0)))
+                            .0
+                    {
                         if generated_random_numbers.is_empty() {
                             break;
                         }
                         {
                             let (at, cbt) = generated_random_numbers.remove(0); // remove the arrival time and cbt from the vec
-                            let process =
-                                Process::new(cbt, at);
+                            let process = Process::new(cbt, at, None);
                             Simulator::enqueue_queue(&mut queue, process); // enqueue process at this point.
                         }
                     }
@@ -223,13 +259,37 @@ impl Simulator {
         });
     }
 
-    pub(crate) fn run_with_predefined_processes(&mut self, queue_discipline: Queues, window: Window,
-                                                context_switch: Duration, time_quantum: Duration, mut processes_to_be_generated:  Vec<(u64, u64)>) { // process_to_be_generated is a vector of tuples (arrival_time, cbt)
+    pub(crate) fn run_with_predefined_processes(
+        &mut self,
+        queue_discipline: Queues,
+        window: Window,
+        context_switch: Duration,
+        time_quantum: Duration,
+        mut processes_to_be_generated: Vec<(u64, u64, Option<String>)>,
+        list_of_disciplines: Option<[String; 4]>,
+    ) {
+        // process_to_be_generated is a vector of tuples (arrival_time, cbt)
         thread::spawn(move || {
             //generating queue: ------------------------------------------------------------------------
-            let mut queue = Simulator::generate_queue(queue_discipline, context_switch, time_quantum);
+            let mut queue = Simulator::generate_queue(
+                queue_discipline,
+                context_switch,
+                time_quantum,
+                list_of_disciplines,
+            );
             let this_time = SystemTime::now();
-            let mut processes_to_be_generated: Vec<(SystemTime, Duration)> = processes_to_be_generated.iter().map(|p| (this_time + Duration::from_millis(p.0), Duration::from_millis(p.1))).collect();
+            let mut processes_to_be_generated: Vec<(SystemTime, Duration, Option<String>)> =
+                processes_to_be_generated
+                    .iter()
+                    .map(|p| {
+                        (
+                            this_time + Duration::from_millis(p.0),
+                            Duration::from_millis(p.1),
+                            p.2.clone(),
+                        )
+                    })
+                    .collect();
+
             // running the simulation ------------------------------------------------------------------
             loop {
                 let right_now = SystemTime::now();
@@ -241,14 +301,35 @@ impl Simulator {
 
                 //check if the current time passed the first arrival time
                 if (!processes_to_be_generated.is_empty()) {
-                    while right_now >= processes_to_be_generated.get(0).unwrap_or(&(SystemTime::now(),Duration::from_secs(0))).0 {
+                    while right_now
+                        >= processes_to_be_generated
+                            .get(0)
+                            .unwrap_or(&(
+                                SystemTime::now(),
+                                Duration::from_secs(0),
+                                Some(String::from("")),
+                            ))
+                            .0
+                    {
                         if processes_to_be_generated.is_empty() {
                             break;
                         }
                         {
-                            let (at, cbt) = processes_to_be_generated.remove(0); // remove the arrival time and cbt from the vec
-                            let process =
-                                Process::new(cbt, at);
+                            let (at, cbt, pt) = processes_to_be_generated.remove(0); // remove the arrival time and cbt from the vec
+                            let selected_process_type: Option<ProcessType>;
+                            if let Some(process_type) = pt {
+                                selected_process_type = match process_type.trim() {
+                                    "system" => Some(ProcessType::SystemProcess),
+                                    "batch" => Some(ProcessType::BatchProcess),
+                                    "interactive" => Some(ProcessType::InteractiveProcess),
+                                    "student" => Some(ProcessType::StudentProcess),
+                                    _ => None,
+                                }
+                            } else {
+                                selected_process_type = None
+                            }
+
+                            let process = Process::new(cbt, at, selected_process_type);
                             Simulator::enqueue_queue(&mut queue, process); // enqueue process at this point.
                         }
                     }

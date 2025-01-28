@@ -33,6 +33,10 @@ pub enum ProcessType {
     /// BatchProcess represents processes that are run in the background, often with lower priority,
     /// and do not require immediate user interaction, such as scheduled tasks or data processing jobs.
     BatchProcess,
+
+    /// LowPriorityProcess represents processes with the lowest priority, which can tolerate delays
+    /// and are executed only when resources are not being used by higher-priority tasks.
+    StudentProcess,
 }
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Metrics {
@@ -132,13 +136,20 @@ impl Process {
         Ok(()) // Returns Ok(()) if there is no error
     }
 
-    pub fn new(cbt: Duration, at: SystemTime) -> Self {
+    pub fn new(cbt: Duration, at: SystemTime, pt: Option<ProcessType>) -> Self {
         let mut rng = thread_rng();
         let process_variants = [
             ProcessType::BatchProcess,
-            ProcessType::SystemProcess,
+            ProcessType::InteractiveProcess,
+            ProcessType::StudentProcess,
             ProcessType::SystemProcess,
         ];
+        let process_type: ProcessType;
+        if let Some(process) = pt {
+            process_type = process;
+        } else {
+            process_type =  process_variants[rng.gen_range(0..process_variants.len())];
+        }
         Process {
             id: Uuid::new_v4(),
             cpu_burst_time: cbt,
@@ -147,7 +158,7 @@ impl Process {
             processed_time: Duration::from_secs(0),
             waiting_time: Duration::from_secs(0),
             last_execution: None,
-            process_type: process_variants[rng.gen_range(0..process_variants.len())],
+            process_type:process_type,
             metrics: Metrics::new(),
         }
     }

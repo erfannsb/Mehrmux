@@ -1,14 +1,16 @@
 use tauri::{window, Emitter, Window};
-use std::collections::BinaryHeap;
 use crate::process_gen::{Metrics, Process, ProcessStatus, ProcessType, SerializableProcess};
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::Display;
+use std::ptr::hash;
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime};
-use serde::de::Unexpected::Str;
 use serde::Serialize;
+use crate::process_gen::ProcessStatus::Ready;
 // Utils -------------------------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum QueueDiscipline {
     /// queue discipline is the way cpu scheduler prioritize processes
     /// with this enum we choose the algorithm and pass it to the ready
@@ -21,6 +23,20 @@ pub enum QueueDiscipline {
     RR,
     SRF,
 }
+
+impl fmt::Display for QueueDiscipline {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QueueDiscipline::FIFO => write!(f, "FIFO"),
+            QueueDiscipline::SPN => write!(f, "SPN"),
+            QueueDiscipline::FCFS => write!(f, "FCFS"),
+            QueueDiscipline::SJF => write!(f, "SJF"),
+            QueueDiscipline::HRRN => write!(f, "HRRN"),
+            QueueDiscipline::RR => write!(f, "RR"),
+            QueueDiscipline::SRF => write!(f, "SRTF"),
+        }
+    }
+}
 #[derive(Debug, Serialize, Clone)]
 pub enum MetricValue {
     // Since metric values' types differ. in order to store these metrics in a single
@@ -28,6 +44,7 @@ pub enum MetricValue {
     DurationValue(Duration),
     PercentageValue(f64),
     IntegerValue(i32),
+    StringValue(String)
 }
 
 struct DataToBeSent {
@@ -38,6 +55,7 @@ struct DataToBeSent {
 // Ready Queue -------------------------------------------------------------------------------------
 
 pub struct ReadyQueue {
+    queue_number: i8,
     processes: Vec<Process>,
     discipline: QueueDiscipline,
     time_quantum: Duration,
@@ -49,6 +67,7 @@ pub struct ReadyQueue {
 impl ReadyQueue {
     pub fn new(discipline: QueueDiscipline, context_switch: Duration, time_quantum: Duration) -> Self {
         ReadyQueue {
+            queue_number: 1,
             processes: Vec::new(),
             discipline,
             time_quantum,
@@ -127,7 +146,7 @@ impl ReadyQueue {
         }
     }
 
-    pub fn execute_next(&mut self, window: &Window) -> Option<Process> {
+    pub fn execute_next(&mut self, window: &Window, is_mlfq: bool) -> Option<Process> {
         if let Some(mut process) = self.dequeue() {
             if process.processed_time == process.cpu_burst_time {
                 return None;
@@ -146,7 +165,7 @@ impl ReadyQueue {
 
             match result {
                 Ok(()) => {
-                    window.emit("process_stopped", process.clone().to_serializable()).unwrap();
+                    window.emit("process_stopped", (self.queue_number,process.clone().to_serializable())).unwrap();
                     println!("{:#?}", process.to_serializable());
                     println!("----------------------------------------");
                     return if process.processed_time == process.cpu_burst_time {
@@ -163,7 +182,9 @@ impl ReadyQueue {
                         process.status = ProcessStatus::Waiting;
                         let copy = process.clone();
                         println!("Process: {} Pushed Back TO Queue", process.id);
-                        self.processes.push(process);
+                        if !is_mlfq {
+                            self.processes.push(process);
+                        }
                         println!("this is the quqeuueueueueueue: {:?}", self.processes);
                         sleep(self.context_switch); // simulating context_switch
                         Some(copy)
@@ -193,8 +214,10 @@ impl ReadyQueue {
             average_metrics.insert(String::from("average_waiting_time"), MetricValue::DurationValue(Duration::from_secs(0)));
             average_metrics.insert(String::from("average_response_time"), MetricValue::DurationValue(Duration::from_secs(0)));
             average_metrics.insert(String::from("cpu_utilization"), MetricValue::PercentageValue(0.0));
+            average_metrics.insert(String::from("queue_discipline"), MetricValue::StringValue(self.discipline.to_string()));
             return average_metrics;
         }
+        average_metrics.insert(String::from("queue_discipline"), MetricValue::StringValue(self.discipline.to_string()));
         average_metrics.insert(
             String::from("average_turnaround_time"),
             MetricValue::DurationValue(
@@ -259,6 +282,7 @@ pub struct MLQ {
     pub queue_1: ReadyQueue,
     pub queue_2: ReadyQueue,
     pub queue_3: ReadyQueue,
+    pub queue_4: ReadyQueue
 }
 
 impl MLQ {
@@ -266,17 +290,24 @@ impl MLQ {
         q1_d: QueueDiscipline,
         q2_d: QueueDiscipline,
         q3_d: QueueDiscipline,
+        q4_d: QueueDiscipline,
         context_switch: Duration,
         time_quantum: Duration,
     ) -> Self {
-        let q1 = ReadyQueue::new(q1_d, time_quantum.clone(), context_switch.clone());
-        let q2 = ReadyQueue::new(q2_d, time_quantum.clone(), context_switch.clone());
-        let q3 = ReadyQueue::new(q3_d, time_quantum, context_switch);
+        let mut q1 = ReadyQueue::new(q1_d, context_switch, time_quantum);
+        q1.queue_number = 1;
+        let mut q2 = ReadyQueue::new(q2_d, context_switch, time_quantum);
+        q2.queue_number = 2;
+        let mut q3 = ReadyQueue::new(q3_d, context_switch, time_quantum);
+        q3.queue_number = 3;
+        let mut q4 = ReadyQueue::new(q4_d, context_switch, time_quantum);
+        q4.queue_number = 4;
 
         MLQ {
             queue_1: q1,
             queue_2: q2,
             queue_3: q3,
+            queue_4: q4,
         }
     }
     pub(crate) fn enqueue(&mut self, process: Process) {
@@ -284,16 +315,20 @@ impl MLQ {
             ProcessType::SystemProcess => self.queue_1.enqueue(process),
             ProcessType::InteractiveProcess => self.queue_2.enqueue(process),
             ProcessType::BatchProcess => self.queue_3.enqueue(process),
+            ProcessType::StudentProcess => self.queue_4.enqueue(process),
         }
     }
 
     pub(crate) fn execute_next(&mut self, window: &Window) {
+        println!("1q: {:?},\n2q: {:?}\n3q: {:?}\n4q: {:?}", self.queue_1.processes, self.queue_2.processes, self.queue_3.processes, self.queue_4.processes);
         if !self.queue_1.processes.is_empty() {
-            self.queue_1.execute_next(window);
+            self.queue_1.execute_next(window, false);
         } else if !self.queue_2.processes.is_empty() {
-            self.queue_2.execute_next(window);
+            self.queue_2.execute_next(window, false);
         } else if !self.queue_3.processes.is_empty() {
-            self.queue_3.execute_next(window);
+            self.queue_3.execute_next(window, false);
+        } else if !self.queue_4.processes.is_empty() {
+            self.queue_4.execute_next(window, false);
         }
     }
 
@@ -301,14 +336,16 @@ impl MLQ {
         self.queue_1.processes.is_empty()
             && self.queue_2.processes.is_empty()
             && self.queue_3.processes.is_empty()
+            && self.queue_4.processes.is_empty()
     }
 
-    pub fn calculate_metric(&self) -> [HashMap<String, MetricValue>; 3] {
+    pub fn calculate_metric(&self) -> [HashMap<String, MetricValue>; 4] {
         let m1 = self.queue_1.calculate_metrics();
         let m2 = self.queue_2.calculate_metrics();
         let m3 = self.queue_3.calculate_metrics();
+        let m4 = self.queue_4.calculate_metrics();
 
-        return [m1,m2,m3]
+        return [m1,m2,m3, m4]
     }
 }
 
@@ -318,6 +355,7 @@ pub struct MLFQ {
     pub queue_1: ReadyQueue,
     pub queue_2: ReadyQueue,
     pub queue_3: ReadyQueue,
+    pub queue_4: ReadyQueue,
 }
 
 impl MLFQ {
@@ -325,19 +363,24 @@ impl MLFQ {
         q1_d: QueueDiscipline,
         q2_d: QueueDiscipline,
         q3_d: QueueDiscipline,
+        q4_d: QueueDiscipline,
         context_switch: Duration,
         time_quantum: Duration
     ) -> Self {
 
-        let q1 = ReadyQueue::new(q1_d, time_quantum.clone(), context_switch.clone());
-        let q2 = ReadyQueue::new(q2_d, time_quantum.clone(), context_switch.clone());
-        let q3 = ReadyQueue::new(q3_d, time_quantum, context_switch);
-
-
+        let mut q1 = ReadyQueue::new(q1_d, context_switch, time_quantum);
+        q1.queue_number = 1;
+        let mut q2 = ReadyQueue::new(q2_d, context_switch, time_quantum);
+        q2.queue_number = 2;
+        let mut q3 = ReadyQueue::new(q3_d, context_switch, time_quantum);
+        q3.queue_number = 3;
+        let mut q4 = ReadyQueue::new(q4_d, context_switch, time_quantum);
+        q4.queue_number = 4;
         MLFQ {
             queue_1: q1,
             queue_2: q2,
             queue_3: q3,
+            queue_4: q4,
         }
     }
 
@@ -347,12 +390,12 @@ impl MLFQ {
 
     pub(crate) fn execute_next(&mut self, window: &Window) {
         if !self.queue_1.processes.is_empty() {
-            let process = self.queue_1.execute_next(window);
+            let process = self.queue_1.execute_next(window, true);
             if let Some(process) = process {
                 self.queue_2.enqueue(process)
             }
         } else if !self.queue_2.processes.is_empty() {
-            let process = self.queue_2.execute_next(window);
+            let process = self.queue_2.execute_next(window, true);
             if let Some(process) = process {
                 if process.waiting_time >= process.cpu_burst_time {
                     self.queue_1.enqueue(process)
@@ -361,28 +404,39 @@ impl MLFQ {
                 }
             }
         } else if !self.queue_3.processes.is_empty() {
-            let process = self.queue_3.execute_next(window);
+            let process = self.queue_3.execute_next(window, true);
             if let Some(process) = process {
                 if process.waiting_time >= process.cpu_burst_time {
                     self.queue_2.enqueue(process)
                 } else {
+                    self.queue_4.enqueue(process)
+                }
+            }
+        } else if !self.queue_4.processes.is_empty() {
+            let process = self.queue_4.execute_next(window, true);
+            if let Some(process) = process {
+                if process.waiting_time >= process.cpu_burst_time {
                     self.queue_3.enqueue(process)
+                } else {
+                    self.queue_4.enqueue(process)
                 }
             }
         }
     }
 
-    pub fn calculate_metric(&self) -> [HashMap<String, MetricValue>; 3] {
+    pub fn calculate_metric(&self) -> [HashMap<String, MetricValue>; 4] {
         let m1 = self.queue_1.calculate_metrics();
         let m2 = self.queue_2.calculate_metrics();
         let m3 = self.queue_3.calculate_metrics();
+        let m4 = self.queue_4.calculate_metrics();
 
-        return [m1,m2,m3]
+        return [m1,m2,m3, m4]
     }
 
     pub fn is_queue_empty(&self) -> bool {
         self.queue_1.processes.is_empty()
             && self.queue_2.processes.is_empty()
             && self.queue_3.processes.is_empty()
+            && self.queue_4.processes.is_empty()
     }
 }
