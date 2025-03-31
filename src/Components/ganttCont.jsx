@@ -15,7 +15,7 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
     let [passed_times_for_all, setPTFA] = useState({});
 
     useEffect(() => {
-        setRows([]);          // Reset rows
+        setRows([]); // Reset rows
         setRows1([]);
         setRows2([]);
         setRows3([]);
