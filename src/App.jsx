@@ -1,8 +1,5 @@
 import {useEffect, useState} from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
 import "./styles/App.css";
-import ProcessMonitor from "./Components/test.jsx";
 import Titlebar from "./Components/titlebar.jsx";
 import AlgoChoose from "./Components/algoChoose.jsx";
 import GanttCont from "./Components/ganttCont.jsx";

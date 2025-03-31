@@ -17,7 +17,7 @@ export default function Titlebar() {
     return <div className={styles.titlebar}>
         <div className={styles.logo}>
             <img src="./icon.png" alt="logo"/>
-            <h4>Mehrnux</h4>
+            <h4>Mehrmux</h4>
         </div>
         <div className={styles.controlbars}>
             <button onClick={onMin}></button>
