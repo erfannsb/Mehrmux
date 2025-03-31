@@ -15,8 +15,6 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
     let [passed_times_for_all, setPTFA] = useState({});
 
     useEffect(() => {
-        console.log("Resetting chart........................");
-        console.log("selected algo after reset: ",selectedAlgo)
         setRows([]);          // Reset rows
         setRows1([]);
         setRows2([]);
@@ -32,13 +30,9 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
         });
 
         const unlistenPF = listen('finished_process', (event) => {
-            console.log(selectedAlgo)
             if (selectedAlgo == "MLFQ" || selectedAlgo == "MLQ") {
-                console.log("what the hell is this finished queue about?")
-                console.log([...finishedP,...event.payload])
                 setFinishedP([...finishedP,...event.payload])
             } else {
-                console.log("oh helllll naaaaaaaaaa")
                 setFinishedP([...event.payload])
             }
         });
@@ -70,7 +64,6 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
     useEffect(()=> {
         let pE = processEvent[1]
         let numOfQ = processEvent[0]
-        console.log({numOfQ, pE})
         if(pE == undefined || pE.length == 0) {
             return  
         }
@@ -80,20 +73,12 @@ export default function GanttCont({processes, restartChart, firstDate, selectedA
         let passed_time;
         if(passed_times_for_all[keyNameForPassedTimes] == undefined){
             passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
-            console.log("passed damn time till first time: ", passed_time)
-            console.log(pE.processed_time.secs + pE.processed_time.nanos)
-            console.log(1e9)
-            console.log(pE.processed_time.secs + pE.processed_time.nanos / 1e9)
             passed_time = passed_time * 1000;
             let ptfa = {...passed_times_for_all}
             ptfa[keyNameForPassedTimes] = passed_time;
             setPTFA({...passed_times_for_all, ...ptfa});
         } else {
             passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
-            console.log("damn passed_time: ", passed_time);
-            console.log(pE.processed_time.secs + pE.processed_time.nanos)
-            console.log(1e9)
-            console.log(pE.processed_time.secs + pE.processed_time.nanos / 1e9)
             passed_time = passed_time * 1000;
             passed_time = passed_time - passed_times_for_all[keyNameForPassedTimes];
             let ptfa = {...passed_times_for_all}
