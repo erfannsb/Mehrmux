@@ -16,14 +16,15 @@ import {
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import chart from "./chart.jsx";
+import useStore from "./../ui_storage.jsx";
 
-export default function IoCont({
-  selectedAlgo,
-  restartChart,
-  restart,
-  handleDate,
-}) {
+export default function IoCont() {
+  const selectedAlgo = useStore((state) => state.selectedAlgo);
+  const restartChart = useStore((state) => state.setRestartChart);
+  const restart = useStore((state) => state.restartChart);
+  const handleDate = useStore((state) => state.setStartingDate);
+
+  // REFERENCES HERE
   const ref_AT = useRef(null);
   const ref_CBT = useRef(null);
   const ref_NP = useRef(null);
@@ -222,7 +223,6 @@ export default function IoCont({
     }, 4000);
   };
 
-
   const checkIFalgoIsPreemptive = (algo) => {
     switch (algo) {
       case "FIFO":
@@ -345,13 +345,13 @@ export default function IoCont({
     const selectedQ3 = queueInfo[2];
     const selectedQ4 = queueInfo[3];
     let pt;
-    if (selectedPT == undefined){
+    if (selectedPT == undefined) {
       pt = null;
     } else {
       pt = selectedPT;
     }
 
-    console.log("what the shit")
+    console.log("what the shit");
 
     let isPreemptive = checkIFalgoIsPreemptive(selectedAlgo);
     if (isPreemptive) {
@@ -414,14 +414,14 @@ export default function IoCont({
     let cbt = refM_CBT.current.value;
     at = parseInt(at);
     cbt = parseInt(cbt);
-    let pt; 
-    if(selectedAlgo == "MLQ") {
+    let pt;
+    if (selectedAlgo == "MLQ") {
       pt = Array.from(refMQ_PT.current.selectedOptions).map(
         (option) => option.value
       )[0];
       setSelectedPT(pt);
     } else {
-      pt = null
+      pt = null;
     }
 
     if (!at || !cbt) {
@@ -651,7 +651,7 @@ export default function IoCont({
                 />
               </div>
               {selectedAlgo == "MLQ" ? (
-                <div style={{gridArea: "2 / 1 / 2 / 3"}}>
+                <div style={{ gridArea: "2 / 1 / 2 / 3" }}>
                   <label htmlFor="pt">Process Type:</label>
                   <select name="pt" id="pt" ref={refMQ_PT}>
                     <option value="system">System Process</option>
