@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import styles from "./../styles/ganttchart.module.css";
 import ChromeDinoGame from "react-chrome-dino";
 import { listen } from "@tauri-apps/api/event";
-import { Chart } from "react-google-charts";
 import useStore from "./../ui_storage.jsx";
 import * as d3 from "d3";
 
@@ -44,21 +43,33 @@ export default function GanttCont() {
   }, [restartChart]); // Trigger effect when `restartChart` changes
 
   useEffect(() => {
+    // const handleResize = () => {
+    //   if (!ChartContRef.current || !svgRef.current) return;
+    //   const { width, height } = ChartContRef.current.getBoundingClientRect();
+    //   d3.select(svgRef.current).attr("width", width).attr("height", height);
+    // };
+
+    // // Run after mount
+    // handleResize();
+
+    // window.addEventListener("resize", handleResize);
+    //
     const unlistenPS = listen("process_stopped", (event) => {
       setProcessEvent(event.payload);
     });
 
     const unlistenPF = listen("finished_process", (event) => {
-      if (selectedAlgo == "MLFQ" || selectedAlgo == "MLQ") {
-        setFinishedP([...finishedP, ...event.payload]);
-      } else {
-        setFinishedP([...event.payload]);
-      }
+      setFinishedP((prev) =>
+        selectedAlgo === "MLFQ" || selectedAlgo === "MLQ"
+          ? [...prev, ...event.payload]
+          : [...event.payload]
+      );
     });
 
     return () => {
       unlistenPF.then((fn) => fn());
       unlistenPS.then((fn) => fn());
+      // window.removeEventListener("resize", handleResize);
     };
   }, []);
 
@@ -80,90 +91,90 @@ export default function GanttCont() {
     { type: "date", id: "End" },
   ];
 
-  //   useEffect(() => {
-  //     let pE = processEvent[1];
-  //     let numOfQ = processEvent[0];
-  //     if (pE == undefined || pE.length == 0) {
-  //       return;
-  //     }
-  //     let keyNameForPassedTimes = pE.id.slice(0, 8);
-  //     const last_execution = calculateTimeWithDate(pE.last_execution);
-  //     const start_time = new Date(0, 0, 0, 0, 0, 0, last_execution);
-  //     let passed_time;
-  //     if (passed_times_for_all[keyNameForPassedTimes] == undefined) {
-  //       passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
-  //       passed_time = passed_time * 1000;
-  //       let ptfa = { ...passed_times_for_all };
-  //       ptfa[keyNameForPassedTimes] = passed_time;
-  //       setPTFA({ ...passed_times_for_all, ...ptfa });
-  //     } else {
-  //       passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
-  //       passed_time = passed_time * 1000;
-  //       passed_time = passed_time - passed_times_for_all[keyNameForPassedTimes];
-  //       let ptfa = { ...passed_times_for_all };
-  //       ptfa[keyNameForPassedTimes] += passed_time;
-  //       setPTFA({ ...passed_times_for_all, ...ptfa });
-  //     }
+  useEffect(() => {
+    let pE = processEvent[1];
+    let numOfQ = processEvent[0];
+    if (pE == undefined || pE.length == 0) {
+      return;
+    }
+    let keyNameForPassedTimes = pE.id.slice(0, 8);
+    const last_execution = calculateTimeWithDate(pE.last_execution);
+    const start_time = new Date(0, 0, 0, 0, 0, 0, last_execution);
+    let passed_time;
+    if (passed_times_for_all[keyNameForPassedTimes] == undefined) {
+      passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
+      passed_time = passed_time * 1000;
+      let ptfa = { ...passed_times_for_all };
+      ptfa[keyNameForPassedTimes] = passed_time;
+      setPTFA({ ...passed_times_for_all, ...ptfa });
+    } else {
+      passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
+      passed_time = passed_time * 1000;
+      passed_time = passed_time - passed_times_for_all[keyNameForPassedTimes];
+      let ptfa = { ...passed_times_for_all };
+      ptfa[keyNameForPassedTimes] += passed_time;
+      setPTFA({ ...passed_times_for_all, ...ptfa });
+    }
 
-  //     let end_time = new Date(0, 0, 0, 0, 0, 0, last_execution + passed_time);
-  //     if (selectedAlgo == "MLQ" || selectedAlgo == "MLFQ") {
-  //       switch (numOfQ) {
-  //         case 1:
-  //           setRows1([
-  //             ...rows1,
-  //             [
-  //               pE.id.slice(0, 8),
-  //               `Process: ${pE.id.slice(0, 8)}`,
-  //               start_time,
-  //               end_time,
-  //             ],
-  //           ]);
-  //           break;
-  //         case 2:
-  //           setRows2([
-  //             ...rows2,
-  //             [
-  //               pE.id.slice(0, 8),
-  //               `Process: ${pE.id.slice(0, 8)}`,
-  //               start_time,
-  //               end_time,
-  //             ],
-  //           ]);
-  //           break;
-  //         case 3:
-  //           setRows3([
-  //             ...rows3,
-  //             [
-  //               pE.id.slice(0, 8),
-  //               `Process: ${pE.id.slice(0, 8)}`,
-  //               start_time,
-  //               end_time,
-  //             ],
-  //           ]);
-  //           break;
-  //         case 4:
-  //           setRows4([
-  //             ...rows4,
-  //             [
-  //               pE.id.slice(0, 8),
-  //               `Process: ${pE.id.slice(0, 8)}`,
-  //               start_time,
-  //               end_time,
-  //             ],
-  //           ]);
-  //       }
-  //     } else {
-  //       setRows([
-  //         ...rows,
-  //         [
-  //           pE.id.slice(0, 8),
-  //           `Process: ${pE.id.slice(0, 8)}`,
-  //           start_time,
-  //           end_time,
-  //         ],
-  //       ]);
-  //     }
-  //   }, [processEvent]);
+    let end_time = new Date(0, 0, 0, 0, 0, 0, last_execution + passed_time);
+    if (selectedAlgo == "MLQ" || selectedAlgo == "MLFQ") {
+      switch (numOfQ) {
+        case 1:
+          setRows1([
+            ...rows1,
+            [
+              pE.id.slice(0, 8),
+              `Process: ${pE.id.slice(0, 8)}`,
+              start_time,
+              end_time,
+            ],
+          ]);
+          break;
+        case 2:
+          setRows2([
+            ...rows2,
+            [
+              pE.id.slice(0, 8),
+              `Process: ${pE.id.slice(0, 8)}`,
+              start_time,
+              end_time,
+            ],
+          ]);
+          break;
+        case 3:
+          setRows3([
+            ...rows3,
+            [
+              pE.id.slice(0, 8),
+              `Process: ${pE.id.slice(0, 8)}`,
+              start_time,
+              end_time,
+            ],
+          ]);
+          break;
+        case 4:
+          setRows4([
+            ...rows4,
+            [
+              pE.id.slice(0, 8),
+              `Process: ${pE.id.slice(0, 8)}`,
+              start_time,
+              end_time,
+            ],
+          ]);
+      }
+    } else {
+      setRows([
+        ...rows,
+        [
+          pE.id.slice(0, 8),
+          `Process: ${pE.id.slice(0, 8)}`,
+          start_time,
+          end_time,
+        ],
+      ]);
+    }
+  }, [processEvent]);
 
   // Building The Chart: --------------------------------------------------------------
 
@@ -218,18 +229,33 @@ export default function GanttCont() {
 
   const svgRef = useRef();
 
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (!ChartContRef.current) return;
+
+    // Only set once
+    if (chartSize.width === 0 && chartSize.height === 0) {
+      const { width, height } = ChartContRef.current.getBoundingClientRect();
+      setChartSize({ width, height });
+    }
+  }, [ChartContRef]);
+
   useEffect(() => {
     if (!data || data.length === 0) return;
-    const { width, height } = ChartContRef.current.getBoundingClientRect();
+    if (chartSize.width === 0 || chartSize.height === 0) return;
 
     const svg = d3
       .select(svgRef.current)
-      .attr("width", width)
-      .attr("height", height);
+      .attr("width", chartSize.width)
+      .attr("height", chartSize.height);
+
     svg.selectAll("*").remove(); // clear before re-render
 
-    console.log({ width, height });
     const margin = { top: 20, right: 20, bottom: 40, left: 20 };
+
+    const width = chartSize.width;
+    const height = chartSize.height;
 
     // Scales
     const x = d3
@@ -240,7 +266,8 @@ export default function GanttCont() {
     const y = d3
       .scaleBand()
       .domain(data.map((d) => d.name))
-      .range([margin.top, height - margin.bottom]);
+      .range([margin.top, height - margin.bottom])
+      .padding(0.2);
 
     const tooltip = d3.select("#tooltip");
     const colors = [
@@ -390,88 +417,7 @@ export default function GanttCont() {
         </div>
         <div className={styles.gantt_main} ref={ChartContRef}>
           <div id="tooltip" className={styles.tooltip}></div>
-
-          {selectedAlgo == "MLQ" || selectedAlgo == "MLFQ" ? (
-            <div className={styles.multiChartCont}>
-              <div>
-                <div className={styles.chartTitle}>
-                  <span>Q1</span>
-                </div>
-                <Chart
-                  className={styles.thechart}
-                  chartType="Timeline"
-                  data={data1}
-                  width="100%"
-                  height="100%"
-                  options={{
-                    colors: colors,
-                    backgroundColor: "#0E1321",
-                  }}
-                />
-              </div>
-              <div>
-                <div className={styles.chartTitle}>
-                  <span>Q2</span>
-                </div>
-                <Chart
-                  className={styles.thechart}
-                  chartType="Timeline"
-                  data={data2}
-                  width="100%"
-                  height="100%"
-                  options={{
-                    colors: colors,
-                    backgroundColor: "#0E1321",
-                  }}
-                />
-              </div>
-              <div>
-                <div className={styles.chartTitle}>
-                  <span>Q3</span>
-                </div>
-                <Chart
-                  className={styles.thechart}
-                  chartType="Timeline"
-                  data={data3}
-                  width="100%"
-                  height="100%"
-                  options={{
-                    colors: colors,
-                    backgroundColor: "#0E1321",
-                  }}
-                />
-              </div>
-              <div>
-                <div className={styles.chartTitle}>
-                  <span>Q4</span>
-                </div>
-                <Chart
-                  className={styles.thechart}
-                  chartType="Timeline"
-                  data={data4}
-                  width="100%"
-                  height="100%"
-                  options={{
-                    colors: colors,
-                    backgroundColor: "#0E1321",
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
-            // <Chart
-            //   className={styles.thechart}
-            //   chartType="Timeline"
-            //   data={data}
-            //   width="100%"
-            //   height="100%"
-            //   options={{
-            //     colors: colors,
-            //     backgroundColor: "#0E1321",
-            //   }}
-            // />
-            <svg ref={svgRef}></svg>
-          )}
+          <svg ref={svgRef}></svg>
         </div>
         <div className={styles.gantt_footer}>
           <ChromeDinoGame className="gantt_footer_game" />

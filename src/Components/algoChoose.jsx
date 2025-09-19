@@ -8,7 +8,6 @@ export default function AlgoChoose() {
   const refA = useRef(null); // Container Div
 
   const handleResize = () => {
-    // Example of resizing logic
     refsB.current.forEach((ref) => {
       if (ref) {
         let h = refA.current.clientHeight;
