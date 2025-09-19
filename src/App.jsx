@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import "./styles/App.css";
 import Titlebar from "./Components/titlebar.jsx";
-import AlgoChoose from "./Components/algoChoose.jsx";
-import GanttCont from "./Components/ganttCont.jsx";
+import AlgoChoose from "./Components/algoChoose.tsx";
+import GanttCont from "./Components/ganttCont.tsx";
 import IoCont from "./Components/ioCont.jsx";
 import { listen } from "@tauri-apps/api/event";
-import useStore from "./ui_storage.jsx";
+import useStore from "./ui_storage.tsx";
 
 function App() {
   const setProcesses = useStore((state) => state.setProcesses);

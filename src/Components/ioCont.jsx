@@ -16,7 +16,7 @@ import {
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import useStore from "./../ui_storage.jsx";
+import useStore from "../ui_storage.tsx";
 
 export default function IoCont() {
   const selectedAlgo = useStore((state) => state.selectedAlgo);

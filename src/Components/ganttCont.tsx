@@ -2,9 +2,10 @@ import { useEffect, useState, useRef } from "react";
 import styles from "./../styles/ganttchart.module.css";
 import ChromeDinoGame from "react-chrome-dino";
 import { listen } from "@tauri-apps/api/event";
-import useStore from "../ui_storage.jsx";
+import useStore from "../ui_storage.tsx";
 import * as d3 from "d3";
-import { Process, Time } from "../ui_storage.jsx";
+import { Process, Time } from "../ui_storage.tsx";
+
 // Type Interface for Incomming Data
 
 interface ProcessStoppedEvent {
@@ -62,8 +63,6 @@ export default function GanttCont() {
     const unlistenPS = listen(
       "process_stopped",
       (event: ProcessStoppedEvent) => {
-        console.log("process_stopped:", event);
-
         setProcessEvent(event.payload);
       }
     );
@@ -71,8 +70,6 @@ export default function GanttCont() {
     const unlistenPF = listen(
       "finished_process",
       (event: FinishedProcessEvent) => {
-        console.log("finished_process:", event);
-
         setFinishedP((prev) =>
           selectedAlgo === "MLFQ" || selectedAlgo === "MLQ"
             ? [...prev, ...event.payload]
@@ -124,87 +121,53 @@ export default function GanttCont() {
   // PreProcessing Incomming Data ----------------------------------------------------------------------
 
   useEffect(() => {
-    let pE = processEvent[1]; //Process Event
-    let numOfQ = processEvent[0]; // Number of Queue
-    if (pE == undefined) {
-      return;
-    }
-    let keyNameForPassedTimes: string = pE.id.slice(0, 8);
-    const last_execution = calculateTimeWithDate(pE.last_execution);
-    const start_time = new Date(0, 0, 0, 0, 0, 0, last_execution);
-    let passed_time;
+    const pE = processEvent[1]; // Process Event
+    const numOfQ = processEvent[0]; // Number of Queue
+
+    if (!pE || !firstDate) return;
+
+    const keyNameForPassedTimes: string = pE.id.slice(0, 8);
+
+    // Convert last_execution and processed_time to milliseconds
+    const lastExecutionTime = new Date(pE.last_execution).getTime();
+
+    const processedMs =
+      pE.processed_time.secs * 1000 + pE.processed_time.nanos / 1e6;
+
+    // Determine passed_time for this process
+    let passedTime: number;
+
     if (passed_times_for_all[keyNameForPassedTimes] == undefined) {
-      passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
-      passed_time = passed_time * 1000;
-      let ptfa = { ...passed_times_for_all };
-      ptfa[keyNameForPassedTimes] = passed_time;
-      setPTFA({ ...passed_times_for_all, ...ptfa });
+      passedTime = processedMs;
+      setPTFA({
+        ...passed_times_for_all,
+        [keyNameForPassedTimes]: passedTime,
+      });
     } else {
-      passed_time = pE.processed_time.secs + pE.processed_time.nanos / 1e9;
-      passed_time = passed_time * 1000;
-      passed_time = passed_time - passed_times_for_all[keyNameForPassedTimes];
-      let ptfa = { ...passed_times_for_all };
-      ptfa[keyNameForPassedTimes] += passed_time;
-      setPTFA({ ...passed_times_for_all, ...ptfa });
+      passedTime = processedMs - passed_times_for_all[keyNameForPassedTimes];
+      setPTFA({
+        ...passed_times_for_all,
+        [keyNameForPassedTimes]:
+          passed_times_for_all[keyNameForPassedTimes] + passedTime,
+      });
     }
 
-    let end_time = new Date(0, 0, 0, 0, 0, 0, last_execution + passed_time);
+    // Compute start and end times relative to firstDate
+    const firstTime = new Date(firstDate).getTime();
 
-    let newData: ChartDataType = {
-      name: pE.id.slice(0, 8),
-      start: start_time,
-      end: end_time,
+    const start_ms = lastExecutionTime - firstTime;
+    const end_ms = start_ms + processedMs;
+
+    const newData: ChartDataType = {
+      name: keyNameForPassedTimes,
+      start: new Date(firstTime + start_ms),
+      end: new Date(firstTime + end_ms),
     };
 
-    // if (selectedAlgo == "MLQ" || selectedAlgo == "MLFQ") {
-    //   switch (numOfQ) {
-    //     case 1:
-    //       setRows1([
-    //         ...rows1,
-    //         [
-    //           pE.id.slice(0, 8),
-    //           `Process: ${pE.id.slice(0, 8)}`,
-    //           start_time,
-    //           end_time,
-    //         ],
-    //       ]);
-    //       break;
-    //     case 2:
-    //       setRows2([
-    //         ...rows2,
-    //         [
-    //           pE.id.slice(0, 8),
-    //           `Process: ${pE.id.slice(0, 8)}`,
-    //           start_time,
-    //           end_time,
-    //         ],
-    //       ]);
-    //       break;
-    //     case 3:
-    //       setRows3([
-    //         ...rows3,
-    //         [
-    //           pE.id.slice(0, 8),
-    //           `Process: ${pE.id.slice(0, 8)}`,
-    //           start_time,
-    //           end_time,
-    //         ],
-    //       ]);
-    //       break;
-    //     case 4:
-    //       setRows4([
-    //         ...rows4,
-    //         [
-    //           pE.id.slice(0, 8),
-    //           `Process: ${pE.id.slice(0, 8)}`,
-    //           start_time,
-    //           end_time,
-    //         ],
-    //       ]);
-    //   }
-    // } else {
-    setRows([...rows, newData]);
-    // }
+    console.log({ newData });
+
+    // Add to the rows for chart
+    setRows((prev) => [...prev, newData]);
   }, [processEvent]);
 
   // Building The Chart: --------------------------------------------------------------
@@ -302,20 +265,21 @@ export default function GanttCont() {
     const drawChart = () => {
       const width = ChartContRef.current?.clientWidth;
       const height = ChartContRef.current?.clientHeight;
-      if (!width || !height) {
-        return;
-      }
+      if (!width || !height) return;
 
       const svg = d3.select(svgRef.current);
       svg.selectAll("*").remove(); // clear previous
 
-      const margin = { top: 20, right: 20, bottom: 40, left: 20 };
+      const margin = { top: 20, right: 20, bottom: 40, left: 50 }; // left margin increased for labels
+      const rowPadding = 15;
 
+      // x scale
       const x = d3
         .scaleTime()
         .domain([d3.min(data, (d) => d.start)!, d3.max(data, (d) => d.end)!])
         .range([margin.left, width - margin.right]);
 
+      // y scale
       const y = d3
         .scaleBand()
         .domain(data.map((d) => d.name))
@@ -326,30 +290,74 @@ export default function GanttCont() {
 
       const color: d3.ScaleOrdinal<string, string> = d3
         .scaleOrdinal<string, string>()
-        .domain(data.map((d) => d.name)) // task names
-        .range(colors); // array of color strings
+        .domain(data.map((d) => d.name))
+        .range(colors);
 
-      // Bars
-
-      const rowPadding = 15;
-
+      // 1️⃣ Background rows
       svg
-        .selectAll("rect")
+        .selectAll("row-bg")
         .data(data)
         .join("rect")
+        .attr("x", margin.left)
+        .attr("y", (d) => y(d.name)!)
+        .attr("width", width - margin.left - margin.right)
+        .attr("height", y.bandwidth())
+        .attr("fill", (d, i) => (i % 2 === 0 ? "#0D1321" : "#0D111D"))
+        .lower();
+
+      // 2️⃣ Grid lines
+      svg
+        .append("g")
+        .attr("transform", `translate(0,${height - margin.bottom})`)
+        .call(
+          d3
+            .axisBottom(x)
+            .ticks(10)
+            .tickSize(-(height - margin.top - margin.bottom))
+        )
+        .selectAll("line")
+        .attr("stroke", "#1B1E2D");
+
+      svg
+        .append("g")
+        .selectAll("line")
+        .data(y.domain())
+        .join("line")
+        .attr("x1", margin.left)
+        .attr("x2", width - margin.right)
+        .attr("y1", (d) => y(d)! + y.bandwidth() / 2)
+        .attr("y2", (d) => y(d)! + y.bandwidth() / 2)
+        .attr("stroke", "#1B1E2D")
+        .attr("stroke-dasharray", "2,2");
+
+      // 3️⃣ Bars
+      svg
+        .selectAll("rect.bar")
+        .data(data)
+        .join("rect")
+        .attr("class", "bar")
         .attr("x", (d) => x(d.start))
         .attr("y", (d) => y(d.name)! + rowPadding / 2)
         .attr("width", (d) => x(d.end) - x(d.start))
         .attr("height", y.bandwidth() - rowPadding)
         .attr("fill", (d) => color(d.name))
-        .attr("rx", 4) // horizontal border radius
-        .attr("ry", 4) // vertical border radius
+        .attr("rx", 4)
+        .attr("ry", 4)
         .on("mouseover", (event, d) => {
-          tooltip.style("opacity", 1).html(`
-      <strong>${d.name}</strong><br/>
-      Start: ${d.start}<br/>
-      End: ${d.end}
-    `);
+          const startMs = d.start.getTime() - firstDate!.getTime(); // difference in ms
+          const endMs = d.end.getTime() - firstDate!.getTime();
+
+          const formatTime = (ms: number) => {
+            const seconds = Math.floor(ms / 1000);
+            const millis = ms % 1000;
+            return `${seconds}s ${millis}ms`;
+          };
+
+          tooltip.style("opacity", 1).html(
+            `<strong>${d.name}</strong><br/>
+       Start: ${formatTime(startMs)}<br/>
+       End: ${formatTime(endMs)}`
+          );
         })
         .on("mousemove", (event) => {
           tooltip
@@ -360,79 +368,58 @@ export default function GanttCont() {
           tooltip.style("opacity", 0);
         });
 
+      // 4️⃣ Labels on top
       svg
         .selectAll("text.label")
         .data(data)
         .join("text")
         .attr("class", "label")
-        .attr("x", (d) => x(d.start) + 5)
+        .text((d) => `Process: ${d.name}`)
+        .attr("font-size", 10)
         .attr("y", (d) => y(d.name)! + y.bandwidth() / 2)
         .attr("dy", "0.35em")
-        .text((d) => "Process: " + d.name)
-        .attr("fill", (d) => getContrastColor(color(d.name)))
-        .attr("font-size", 10);
+        .attr("fill", (d) => {
+          const barWidth = x(d.end) - x(d.start);
+          const tempText = svg
+            .append("text")
+            .text(`Process: ${d.name}`)
+            .attr("font-size", 10);
+          const labelWidth = tempText.node()!.getBBox().width;
+          tempText.remove();
+          return labelWidth > barWidth
+            ? "#fff"
+            : getContrastColor(color(d.name));
+        })
+        .attr("x", (d) => {
+          const barWidth = x(d.end) - x(d.start);
+          const tempText = svg
+            .append("text")
+            .text(`Process: ${d.name}`)
+            .attr("font-size", 10);
+          const labelWidth = tempText.node()!.getBBox().width;
+          tempText.remove();
 
+          if (labelWidth > barWidth) {
+            // Outside bar on the left
+            const pos = x(d.start) - labelWidth - 5;
+            return pos < margin.left ? margin.left : pos;
+          } else {
+            // Inside bar
+            return x(d.start) + 5;
+          }
+        });
+
+      // Axes styling
       svg.selectAll(".domain, .tick line").attr("stroke", "#444");
-
-      // Axes
-
-      // Add horizontal + vertical grid lines for clarity:
-
-      svg
-        .append("g")
-        .attr("class", "grid")
-        .attr("transform", `translate(0,${height - margin.bottom})`)
-        .call(
-          d3
-            .axisBottom(x)
-            .ticks(10)
-            .tickSize(-(height - margin.top - margin.bottom))
-        )
-        .selectAll("line")
-        .attr("stroke", "#1B1E2D"); // subtle grid
-
-      svg
-        .append("g")
-        .attr("class", "y-grid")
-        .selectAll("line")
-        .data(y.domain())
-        .join("line")
-        .attr("x1", margin.left)
-        .attr("x2", width - margin.right)
-        .attr("y1", (d, i) => {
-          // place line between bands
-          if (i === 0) return y(d)! - (y.padding() * y.bandwidth()) / 2;
-          return y(d)! - (y.padding() * y.bandwidth()) / 2;
-        })
-        .attr("y2", (d, i) => {
-          if (i === 0) return y(d)! - (y.padding() * y.bandwidth()) / 2;
-          return y(d)! - (y.padding() * y.bandwidth()) / 2;
-        })
-        .attr("stroke", "#1B1E2D")
-        .attr("stroke-dasharray", "2,2");
-
       svg.selectAll(".tick text").attr("fill", "#aaa");
-
-      svg
-        .selectAll("row-bg")
-        .data(data)
-        .join("rect")
-        .attr("x", margin.left)
-        .attr("y", (d, i) => y(d.name)!)
-        .attr("width", width - margin.left - margin.right)
-        .attr("height", y.bandwidth())
-        .attr("fill", (d, i) => (i % 2 === 0 ? "#0D1321" : "#0D111D")) // even rows darker
-        .lower(); // ensures background is behind bars
     };
 
-    drawChart(); // initial draw
-    const handleResize = () => {
-      drawChart(); // redraw on resize
-    };
+    drawChart();
 
+    const handleResize = () => drawChart();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [data]);
+  }, [rows]);
 
   // ---------------------------------------------------------------------------
 

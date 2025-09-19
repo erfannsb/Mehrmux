@@ -4,13 +4,14 @@ import { useEffect, useRef } from "react";
 export default function AlgoChoose() {
   const setSelectedAlgo = useStore((state) => state.setSelectedAlgo);
   const algo = useStore((state) => state.selectedAlgo);
-  const refsB = useRef([]); // Algorithm select Component
-  const refA = useRef(null); // Container Div
+  const refsB = useRef<(HTMLButtonElement | null)[]>([]);
+  const refA = useRef<HTMLDivElement | null>(null); // Container Div
 
   const handleResize = () => {
     refsB.current.forEach((ref) => {
       if (ref) {
-        let h = refA.current.clientHeight;
+        let h = refA.current?.clientHeight;
+        if (!h) return;
         h -= 65;
         ref.style.height = h / 7 + "px";
       }
@@ -21,7 +22,8 @@ export default function AlgoChoose() {
     // Add event listener for window resize
     refsB.current.forEach((ref, index) => {
       if (ref) {
-        let h = refA.current.clientHeight;
+        let h = refA.current?.clientHeight;
+        if (!h) return;
         h -= 65;
         ref.style.height = h / 7 + "px";
       }
@@ -45,7 +47,7 @@ export default function AlgoChoose() {
     { image: "./queue_icons/Plus.svg", name: "SRTF", value: "SRTF" },
   ];
 
-  const on_click = (value) => {
+  const on_click = (value: string) => {
     setSelectedAlgo(value);
   };
 
@@ -59,7 +61,9 @@ export default function AlgoChoose() {
               ? `${styles.active_button} ${styles.buttons}`
               : styles.buttons
           }
-          ref={(el) => (refsB.current[index] = el)}
+          ref={(el) => {
+            refsB.current[index] = el; // assign to array
+          }}
           onClick={() => on_click(element.value)}
         >
           <img src={element.image} alt="img" />
