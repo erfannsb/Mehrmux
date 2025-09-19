@@ -1,13 +1,10 @@
-use tauri::{window, Emitter, Window};
 use crate::process_gen::{Metrics, Process, ProcessStatus, ProcessType, SerializableProcess};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
-use std::fmt::Display;
-use std::ptr::hash;
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime};
-use serde::Serialize;
-use crate::process_gen::ProcessStatus::Ready;
+use tauri::{Emitter, Window};
 // Utils -------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
@@ -44,7 +41,7 @@ pub enum MetricValue {
     DurationValue(Duration),
     PercentageValue(f64),
     IntegerValue(i32),
-    StringValue(String)
+    StringValue(String),
 }
 
 struct DataToBeSent {
@@ -65,7 +62,11 @@ pub struct ReadyQueue {
 }
 
 impl ReadyQueue {
-    pub fn new(discipline: QueueDiscipline, context_switch: Duration, time_quantum: Duration) -> Self {
+    pub fn new(
+        discipline: QueueDiscipline,
+        context_switch: Duration,
+        time_quantum: Duration,
+    ) -> Self {
         ReadyQueue {
             queue_number: 1,
             processes: Vec::new(),
@@ -100,11 +101,13 @@ impl ReadyQueue {
                 });
             }
             QueueDiscipline::RR => {
-                self.processes.sort_by(|p1,p2| {
+                self.processes.sort_by(|p1, p2| {
                     let p1_le = p1.last_execution.unwrap_or(SystemTime::UNIX_EPOCH);
                     let p2_le = p2.last_execution.unwrap_or(SystemTime::UNIX_EPOCH);
 
-                    p1_le.partial_cmp(&p2_le).unwrap_or(std::cmp::Ordering::Equal)
+                    p1_le
+                        .partial_cmp(&p2_le)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 });
             }
             QueueDiscipline::SRF => {
@@ -154,7 +157,10 @@ impl ReadyQueue {
             let right_now = Instant::now();
             process.status = ProcessStatus::Running;
             println!("--------------------------------------");
-            println!("process {:#?} is running in queue: {:?}", process, self.discipline);
+            println!(
+                "process {:#?} is running in queue: {:?}",
+                process, self.discipline
+            );
 
             let result;
             if self.is_preemptive() {
@@ -165,13 +171,22 @@ impl ReadyQueue {
 
             match result {
                 Ok(()) => {
-                    window.emit("process_stopped", (self.queue_number,process.clone().to_serializable())).unwrap();
+                    window
+                        .emit(
+                            "process_stopped",
+                            (self.queue_number, process.clone().to_serializable()),
+                        )
+                        .unwrap();
                     println!("{:#?}", process.to_serializable());
                     println!("----------------------------------------");
                     return if process.processed_time == process.cpu_burst_time {
                         process.status = ProcessStatus::Terminated;
                         self.finished_processes.push(process.clone());
-                        let data_to_be_sent: Vec<SerializableProcess> = self.finished_processes.iter().map(|p| p.to_serializable()).collect();
+                        let data_to_be_sent: Vec<SerializableProcess> = self
+                            .finished_processes
+                            .iter()
+                            .map(|p| p.to_serializable())
+                            .collect();
                         window.emit("finished_process", data_to_be_sent).unwrap();
                         println!("this process {:?} is finished", process.id);
                         println!("this is the quqeuueueueueueue: {:?}", self.processes);
@@ -210,14 +225,32 @@ impl ReadyQueue {
         let length_of_processes: u32 = process_metrics.len() as u32;
         let mut average_metrics: HashMap<String, MetricValue> = HashMap::new();
         if length_of_processes == 0 {
-            average_metrics.insert(String::from("average_turnaround_time"), MetricValue::DurationValue(Duration::from_secs(0)));
-            average_metrics.insert(String::from("average_waiting_time"), MetricValue::DurationValue(Duration::from_secs(0)));
-            average_metrics.insert(String::from("average_response_time"), MetricValue::DurationValue(Duration::from_secs(0)));
-            average_metrics.insert(String::from("cpu_utilization"), MetricValue::PercentageValue(0.0));
-            average_metrics.insert(String::from("queue_discipline"), MetricValue::StringValue(self.discipline.to_string()));
+            average_metrics.insert(
+                String::from("average_turnaround_time"),
+                MetricValue::DurationValue(Duration::from_secs(0)),
+            );
+            average_metrics.insert(
+                String::from("average_waiting_time"),
+                MetricValue::DurationValue(Duration::from_secs(0)),
+            );
+            average_metrics.insert(
+                String::from("average_response_time"),
+                MetricValue::DurationValue(Duration::from_secs(0)),
+            );
+            average_metrics.insert(
+                String::from("cpu_utilization"),
+                MetricValue::PercentageValue(0.0),
+            );
+            average_metrics.insert(
+                String::from("queue_discipline"),
+                MetricValue::StringValue(self.discipline.to_string()),
+            );
             return average_metrics;
         }
-        average_metrics.insert(String::from("queue_discipline"), MetricValue::StringValue(self.discipline.to_string()));
+        average_metrics.insert(
+            String::from("queue_discipline"),
+            MetricValue::StringValue(self.discipline.to_string()),
+        );
         average_metrics.insert(
             String::from("average_turnaround_time"),
             MetricValue::DurationValue(
@@ -282,7 +315,7 @@ pub struct MLQ {
     pub queue_1: ReadyQueue,
     pub queue_2: ReadyQueue,
     pub queue_3: ReadyQueue,
-    pub queue_4: ReadyQueue
+    pub queue_4: ReadyQueue,
 }
 
 impl MLQ {
@@ -320,7 +353,13 @@ impl MLQ {
     }
 
     pub(crate) fn execute_next(&mut self, window: &Window) {
-        println!("1q: {:?},\n2q: {:?}\n3q: {:?}\n4q: {:?}", self.queue_1.processes, self.queue_2.processes, self.queue_3.processes, self.queue_4.processes);
+        println!(
+            "1q: {:?},\n2q: {:?}\n3q: {:?}\n4q: {:?}",
+            self.queue_1.processes,
+            self.queue_2.processes,
+            self.queue_3.processes,
+            self.queue_4.processes
+        );
         if !self.queue_1.processes.is_empty() {
             self.queue_1.execute_next(window, false);
         } else if !self.queue_2.processes.is_empty() {
@@ -345,7 +384,7 @@ impl MLQ {
         let m3 = self.queue_3.calculate_metrics();
         let m4 = self.queue_4.calculate_metrics();
 
-        return [m1,m2,m3, m4]
+        return [m1, m2, m3, m4];
     }
 }
 
@@ -365,9 +404,8 @@ impl MLFQ {
         q3_d: QueueDiscipline,
         q4_d: QueueDiscipline,
         context_switch: Duration,
-        time_quantum: Duration
+        time_quantum: Duration,
     ) -> Self {
-
         let mut q1 = ReadyQueue::new(q1_d, context_switch, time_quantum);
         q1.queue_number = 1;
         let mut q2 = ReadyQueue::new(q2_d, context_switch, time_quantum);
@@ -430,7 +468,7 @@ impl MLFQ {
         let m3 = self.queue_3.calculate_metrics();
         let m4 = self.queue_4.calculate_metrics();
 
-        return [m1,m2,m3, m4]
+        return [m1, m2, m3, m4];
     }
 
     pub fn is_queue_empty(&self) -> bool {
