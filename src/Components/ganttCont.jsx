@@ -43,17 +43,6 @@ export default function GanttCont() {
   }, [restartChart]); // Trigger effect when `restartChart` changes
 
   useEffect(() => {
-    // const handleResize = () => {
-    //   if (!ChartContRef.current || !svgRef.current) return;
-    //   const { width, height } = ChartContRef.current.getBoundingClientRect();
-    //   d3.select(svgRef.current).attr("width", width).attr("height", height);
-    // };
-
-    // // Run after mount
-    // handleResize();
-
-    // window.addEventListener("resize", handleResize);
-    //
     const unlistenPS = listen("process_stopped", (event) => {
       setProcessEvent(event.payload);
     });
@@ -69,7 +58,6 @@ export default function GanttCont() {
     return () => {
       unlistenPF.then((fn) => fn());
       unlistenPS.then((fn) => fn());
-      // window.removeEventListener("resize", handleResize);
     };
   }, []);
 
@@ -243,155 +231,159 @@ export default function GanttCont() {
 
   useEffect(() => {
     if (!data || data.length === 0) return;
-    if (chartSize.width === 0 || chartSize.height === 0) return;
 
-    const svg = d3
-      .select(svgRef.current)
-      .attr("width", chartSize.width)
-      .attr("height", chartSize.height);
+    const drawChart = () => {
+      const width = ChartContRef.current.clientWidth;
+      const height = ChartContRef.current.clientHeight;
 
-    svg.selectAll("*").remove(); // clear before re-render
+      const svg = d3.select(svgRef.current);
+      svg.selectAll("*").remove(); // clear previous
 
-    const margin = { top: 20, right: 20, bottom: 40, left: 20 };
+      const margin = { top: 20, right: 20, bottom: 40, left: 20 };
 
-    const width = chartSize.width;
-    const height = chartSize.height;
+      const x = d3
+        .scaleTime()
+        .domain([d3.min(data, (d) => d.start), d3.max(data, (d) => d.end)])
+        .range([margin.left, width - margin.right]);
 
-    // Scales
-    const x = d3
-      .scaleTime()
-      .domain([d3.min(data, (d) => d.start), d3.max(data, (d) => d.end)])
-      .range([margin.left, width - margin.right]);
+      const y = d3
+        .scaleBand()
+        .domain(data.map((d) => d.name))
+        .range([margin.top, height - margin.bottom])
+        .padding(0.1);
 
-    const y = d3
-      .scaleBand()
-      .domain(data.map((d) => d.name))
-      .range([margin.top, height - margin.bottom])
-      .padding(0.2);
+      const tooltip = d3.select("#tooltip");
+      const colors = [
+        "#F38181", // Coral Red
+        "#FCE38A", // Lemon Yellow
+        "#EAFFD0", // Light Lime Green
+        "#95E1D3", // Teal
+        "#A8D8EA", // Sky Blue
+        "#AA96DA", // Lavender Purple
+        "#FC5185", // Watermelon Pink
+        "#3FC1C9", // Aqua Blue
+        "#FFDD59", // Bright Yellow
+        "#FF5722", // Vibrant Orange
+        "#C1C8E4", // Soft Periwinkle
+        "#FFD460", // Soft Mustard
+        "#B8DE6F", // Soft Green
+        "#FF6B6B", // Soft Red
+        "#6A0572", // Deep Purple
+        "#FFE5B4", // Pale Peach
+        "#9DDCDC", // Light Cyan
+        "#FFB6C1", // Light Pink
+        "#F8B195", // Peach Pink
+        "#355C7D", // Slate Blue
+      ];
 
-    const tooltip = d3.select("#tooltip");
-    const colors = [
-      "#F38181", // Coral Red
-      "#FCE38A", // Lemon Yellow
-      "#EAFFD0", // Light Lime Green
-      "#95E1D3", // Teal
-      "#A8D8EA", // Sky Blue
-      "#AA96DA", // Lavender Purple
-      "#FC5185", // Watermelon Pink
-      "#3FC1C9", // Aqua Blue
-      "#FFDD59", // Bright Yellow
-      "#FF5722", // Vibrant Orange
-      "#C1C8E4", // Soft Periwinkle
-      "#FFD460", // Soft Mustard
-      "#B8DE6F", // Soft Green
-      "#FF6B6B", // Soft Red
-      "#6A0572", // Deep Purple
-      "#FFE5B4", // Pale Peach
-      "#9DDCDC", // Light Cyan
-      "#FFB6C1", // Light Pink
-      "#F8B195", // Peach Pink
-      "#355C7D", // Slate Blue
-    ];
+      const color = d3
+        .scaleOrdinal()
+        .domain(data.map((d) => d.name)) // map task names to colors
+        .range(colors);
 
-    const color = d3
-      .scaleOrdinal()
-      .domain(data.map((d) => d.name)) // map task names to colors
-      .range(colors);
+      // Bars
 
-    // Bars
+      const rowPadding = 15;
 
-    const rowPadding = 15;
-
-    svg
-      .selectAll("rect")
-      .data(data)
-      .join("rect")
-      .attr("x", (d) => x(d.start))
-      .attr("y", (d) => y(d.name) + rowPadding / 2)
-      .attr("width", (d) => x(d.end) - x(d.start))
-      .attr("height", y.bandwidth() - rowPadding)
-      .attr("fill", (d) => color(d.name))
-      .attr("rx", 4) // horizontal border radius
-      .attr("ry", 4) // vertical border radius
-      .on("mouseover", (event, d) => {
-        tooltip.style("opacity", 1).html(`
+      svg
+        .selectAll("rect")
+        .data(data)
+        .join("rect")
+        .attr("x", (d) => x(d.start))
+        .attr("y", (d) => y(d.name) + rowPadding / 2)
+        .attr("width", (d) => x(d.end) - x(d.start))
+        .attr("height", y.bandwidth() - rowPadding)
+        .attr("fill", (d) => color(d.name))
+        .attr("rx", 4) // horizontal border radius
+        .attr("ry", 4) // vertical border radius
+        .on("mouseover", (event, d) => {
+          tooltip.style("opacity", 1).html(`
       <strong>${d.name}</strong><br/>
       Start: ${d.start}<br/>
       End: ${d.end}
     `);
-      })
-      .on("mousemove", (event) => {
-        tooltip
-          .style("left", event.offsetX + 15 + "px")
-          .style("top", event.offsetY + "px");
-      })
-      .on("mouseout", () => {
-        tooltip.style("opacity", 0);
-      });
+        })
+        .on("mousemove", (event) => {
+          tooltip
+            .style("left", event.offsetX + 15 + "px")
+            .style("top", event.offsetY + "px");
+        })
+        .on("mouseout", () => {
+          tooltip.style("opacity", 0);
+        });
 
-    svg
-      .selectAll("text.label")
-      .data(data)
-      .join("text")
-      .attr("class", "label")
-      .attr("x", (d) => x(d.start) + 5)
-      .attr("y", (d) => y(d.name) + y.bandwidth() / 2)
-      .attr("dy", "0.35em")
-      .text((d) => "Process: " + d.name)
-      .attr("fill", (d) => getContrastColor(color(d.name)))
-      .attr("font-size", 10);
+      svg
+        .selectAll("text.label")
+        .data(data)
+        .join("text")
+        .attr("class", "label")
+        .attr("x", (d) => x(d.start) + 5)
+        .attr("y", (d) => y(d.name) + y.bandwidth() / 2)
+        .attr("dy", "0.35em")
+        .text((d) => "Process: " + d.name)
+        .attr("fill", (d) => getContrastColor(color(d.name)))
+        .attr("font-size", 10);
 
-    svg.selectAll(".domain, .tick line").attr("stroke", "#444");
+      svg.selectAll(".domain, .tick line").attr("stroke", "#444");
 
-    // Axes
+      // Axes
 
-    // Add horizontal + vertical grid lines for clarity:
+      // Add horizontal + vertical grid lines for clarity:
 
-    svg
-      .append("g")
-      .attr("class", "grid")
-      .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(
-        d3
-          .axisBottom(x)
-          .ticks(10)
-          .tickSize(-(height - margin.top - margin.bottom))
-      )
-      .selectAll("line")
-      .attr("stroke", "#1B1E2D"); // subtle grid
+      svg
+        .append("g")
+        .attr("class", "grid")
+        .attr("transform", `translate(0,${height - margin.bottom})`)
+        .call(
+          d3
+            .axisBottom(x)
+            .ticks(10)
+            .tickSize(-(height - margin.top - margin.bottom))
+        )
+        .selectAll("line")
+        .attr("stroke", "#1B1E2D"); // subtle grid
 
-    svg
-      .append("g")
-      .attr("class", "y-grid")
-      .selectAll("line")
-      .data(y.domain())
-      .join("line")
-      .attr("x1", margin.left)
-      .attr("x2", width - margin.right)
-      .attr("y1", (d, i) => {
-        // place line between bands
-        if (i === 0) return y(d) - (y.padding() * y.bandwidth()) / 2;
-        return y(d) - (y.padding() * y.bandwidth()) / 2;
-      })
-      .attr("y2", (d, i) => {
-        if (i === 0) return y(d) - (y.padding() * y.bandwidth()) / 2;
-        return y(d) - (y.padding() * y.bandwidth()) / 2;
-      })
-      .attr("stroke", "#1B1E2D")
-      .attr("stroke-dasharray", "2,2");
+      svg
+        .append("g")
+        .attr("class", "y-grid")
+        .selectAll("line")
+        .data(y.domain())
+        .join("line")
+        .attr("x1", margin.left)
+        .attr("x2", width - margin.right)
+        .attr("y1", (d, i) => {
+          // place line between bands
+          if (i === 0) return y(d) - (y.padding() * y.bandwidth()) / 2;
+          return y(d) - (y.padding() * y.bandwidth()) / 2;
+        })
+        .attr("y2", (d, i) => {
+          if (i === 0) return y(d) - (y.padding() * y.bandwidth()) / 2;
+          return y(d) - (y.padding() * y.bandwidth()) / 2;
+        })
+        .attr("stroke", "#1B1E2D")
+        .attr("stroke-dasharray", "2,2");
 
-    svg.selectAll(".tick text").attr("fill", "#aaa");
+      svg.selectAll(".tick text").attr("fill", "#aaa");
 
-    svg
-      .selectAll("row-bg")
-      .data(data)
-      .join("rect")
-      .attr("x", margin.left)
-      .attr("y", (d, i) => y(d.name))
-      .attr("width", width - margin.left - margin.right)
-      .attr("height", y.bandwidth())
-      .attr("fill", (d, i) => (i % 2 === 0 ? "#0D1321" : "#0D111D")) // even rows darker
-      .lower(); // ensures background is behind bars
+      svg
+        .selectAll("row-bg")
+        .data(data)
+        .join("rect")
+        .attr("x", margin.left)
+        .attr("y", (d, i) => y(d.name))
+        .attr("width", width - margin.left - margin.right)
+        .attr("height", y.bandwidth())
+        .attr("fill", (d, i) => (i % 2 === 0 ? "#0D1321" : "#0D111D")) // even rows darker
+        .lower(); // ensures background is behind bars
+    };
+
+    drawChart(); // initial draw
+    const handleResize = () => {
+      drawChart(); // redraw on resize
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, [data]);
 
   // ---------------------------------------------------------------------------
@@ -417,7 +409,7 @@ export default function GanttCont() {
         </div>
         <div className={styles.gantt_main} ref={ChartContRef}>
           <div id="tooltip" className={styles.tooltip}></div>
-          <svg ref={svgRef}></svg>
+          <svg ref={svgRef} width="100%" height="100%"></svg>
         </div>
         <div className={styles.gantt_footer}>
           <ChromeDinoGame className="gantt_footer_game" />
